@@ -407,6 +407,11 @@
       startTime = new Date();
       endTime = null;
       setStatus("Kayıt başladı. Öğrenciden problem çözümünü sesli yapmasını isteyiniz.");
+      setTimeout(() => {
+  if (gazeData.length === 0) {
+    alert("Henüz gaze verisi oluşmadı. Lütfen yüzünüz kamerada görünsün, kalibrasyon yapın ve kırmızı gaze noktasının ekranda hareket ettiğini kontrol edin.");
+  }
+}, 3000);
       recordingInterval = setInterval(recordGazeSample, sampleIntervalMs);
     }
 
