@@ -229,23 +229,48 @@
 
     async function startWebGazer() {
       setStatus("Kamera başlatılıyor. Tarayıcı kamera izni isteyebilir.");
-      await webgazer
-        .setRegression("ridge")
-        .setTracker("clmtrackr")
-        .setGazeListener(function(data, elapsedTime) {
-          if (!data) return;
-          latestGaze = { x: data.x, y: data.y, elapsedTime: elapsedTime };
-          const dot = document.getElementById("gazeDot");
-          dot.style.display = "block";
-          dot.style.left = data.x + "px";
-          dot.style.top = data.y + "px";
-        })
-        .begin();
+      latestGaze = null;
 
-      webgazer.showVideoPreview(true).showPredictionPoints(false);
-      webgazer.showFaceOverlay(true);
-      webgazer.showFaceFeedbackBox(true);
-      setStatus("Kamera aktif. Yüz kutusunu kontrol edin, sonra otomatik kalibrasyon yapın.");
+      try {
+        await webgazer
+          .setRegression("ridge")
+          .setGazeListener(function(data, elapsedTime) {
+            if (!data) return;
+
+            latestGaze = {
+              x: data.x,
+              y: data.y,
+              elapsedTime: elapsedTime
+            };
+
+            const dot = document.getElementById("gazeDot");
+            dot.style.display = "block";
+            dot.style.left = data.x + "px";
+            dot.style.top = data.y + "px";
+          })
+          .begin();
+
+        webgazer.showVideoPreview(true);
+        webgazer.showPredictionPoints(true);
+        webgazer.showFaceOverlay(true);
+        webgazer.showFaceFeedbackBox(true);
+
+        if (typeof webgazer.resume === "function") {
+          webgazer.resume();
+        }
+
+        setStatus("Kamera aktif. Lütfen yüz kutusu ve kırmızı gaze noktasının hareket ettiğini kontrol edin.");
+
+        setTimeout(() => {
+          if (!latestGaze) {
+            setStatus("Kamera açık; ancak gaze koordinatı henüz gelmedi. Yüzünüz kutu içine girmeli, ışık yeterli olmalı ve Chrome kullanmalısınız.");
+          }
+        }, 5000);
+      } catch (error) {
+        console.error(error);
+        setStatus("WebGazer başlatılamadı. Kamera iznini, HTTPS bağlantısını ve tarayıcı konsolunu kontrol edin.");
+        alert("WebGazer başlatılamadı. Lütfen Chrome kullanın, kamera iznini verin ve sayfayı Ctrl+F5 ile yenileyin.");
+      }
     }
 
     function startCalibration() {
@@ -340,8 +365,10 @@
     }
 
     function recordGazeSample() {
-      if (!isRecording || !latestGaze) {
-        setStatus("Kayıt açık; ancak henüz gaze koordinatı gelmiyor. Yüz kutusu, ışık ve kalibrasyonu kontrol edin.");
+      if (!isRecording) return;
+
+      if (!latestGaze) {
+        setStatus("Kayıt açık; fakat gaze verisi yok. Yüz kutusu ve kırmızı gaze noktasını kontrol edin. Gaze noktası yoksa CSV/ısı haritası oluşmaz.");
         return;
       }
 
