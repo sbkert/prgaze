@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Python Kod Anlama ve Webcam Gaze Tracking Araştırması</title>
+  <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; background: #f5f5f5; color: #222; }
+    header { background: #222; color: white; padding: 14px 24px; font-size: 20px; font-weight: bold; }
+    main { padding: 24px; }
+    .panel { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); margin-bottom: 20px; }
+    button { padding: 10px 16px; margin: 6px; border: none; border-radius: 6px; background: #2d6cdf; color: white; cursor: pointer; font-size: 15px; }
+    button:hover { background: #174fa8; }
+    button.secondary { background: #666; }
+    button.danger { background: #b3261e; }
+    button.success { background: #16803c; }
+    input, select, textarea { padding: 9px; margin: 6px; border: 1px solid #aaa; border-radius: 6px; font-size: 15px; }
+    #calibrationScreen { position: fixed; inset: 0; background: white; display: none; z-index: 9998; }
+    .calibration-point { width: 24px; height: 24px; background: #d00000; border-radius: 50%; position: absolute; transform: translate(-50%, -50%); cursor: pointer; box-shadow: 0 0 0 8px rgba(208,0,0,0.15); }
+    #calibrationInstruction { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #222; color: white; padding: 12px 18px; border-radius: 8px; z-index: 9999; }
+    #experimentArea { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 16px; min-height: 460px; }
+    .aoi { border: 3px solid #444; border-radius: 10px; padding: 18px; background: #fff; position: relative; }
+    .aoi-title { font-weight: bold; margin-bottom: 12px; color: #2d6cdf; }
+    pre { background: #f0f0f0; padding: 14px; border-radius: 8px; overflow: auto; font-size: 16px; line-height: 1.55; }
+    .code-line { display: grid; grid-template-columns: 38px 1fr; column-gap: 12px; font-family: Consolas, Monaco, monospace; }
+    .line-no { color: #777; text-align: right; user-select: none; border-right: 1px solid #ccc; padding-right: 8px; }
+    .line-code { white-space: pre; }
+    #gazeDot { position: fixed; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.75); border-radius: 50%; pointer-events: none; z-index: 9997; display: none; transform: translate(-50%, -50%); }
+    #status { font-weight: bold; color: #2d6cdf; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #eeeeee; }
+    .small { font-size: 13px; color: #555; }
+    .task-nav { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .task-pill { background: #eee; color: #222; border-radius: 20px; padding: 6px 10px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <header>Python Kod Anlama ve Webcam Gaze Tracking Araştırması</header>
+
+  <main>
+    <section class="panel">
+      <h2>Katılımcı ve Oturum Bilgileri</h2>
+      <label>Katılımcı Kodu:</label>
+      <input type="text" id="participantId" placeholder="Örn: P01" />
+      <label>Görev:</label>
+      <select id="taskSelector" onchange="loadSelectedTask()"></select>
+      <label>Görev Durumu:</label>
+      <select id="taskCompletion">
+        <option value="Completed without assistance">Completed without assistance</option>
+        <option value="Completed with assistance">Completed with assistance</option>
+        <option value="Not completed">Not completed</option>
+      </select>
+      <p id="status">Durum: Hazır</p>
+
+      <button onclick="startWebGazer()">1. Kamerayı Başlat</button>
+      <button onclick="startCalibration()">2. Kalibrasyon Yap</button>
+      <button onclick="startRecording()">3. Kaydı Başlat</button>
+      <button class="secondary" onclick="stopRecording()">Kaydı Durdur</button>
+      <button class="success" onclick="markHelp()">Yardım Verildi</button>
+      <button class="success" onclick="markStep()">Manuel Adım Ekle</button>
+      <button onclick="previousTask()">Önceki Görev</button>
+      <button onclick="nextTask()">Sonraki Görev</button>
+      <button onclick="downloadRawCSV()">Ham Gaze CSV</button>
+      <button onclick="downloadSummaryCSV()">Özet Analiz CSV</button>
+      <button onclick="downloadTransitionsCSV()">Scan Path CSV</button>
+      <button class="danger" onclick="resetData()">Veriyi Temizle</button>
+
+      <p class="small">Not: Mouse tıklamaları ve klavye girişleri otomatik olarak “step” sayısına eklenir. Problem çözümünü sesli düşünme protokolüyle yaptırınız.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Görev Ekranı</h2>
+      <div class="task-nav">
+        <span class="task-pill" id="taskInfo">Görev 1 / 12</span>
+        <span class="task-pill" id="atomInfo">Kod örüntüsü</span>
+      </div>
+      <p><strong>Yönerge:</strong> Lütfen kodu çalıştırmadan okuyunuz. Kodun ekrana hangi çıktıyı vereceğini tahmin ediniz. Düşünme sürecinizi yüksek sesle açıklayınız: “Önce şu satıra bakıyorum… Bu değişken burada değişiyor… Çıktının şu olacağını düşünüyorum…”</p>
+
+      <div id="experimentArea">
+        <div class="aoi" data-aoi="Kod Alanı">
+          <div class="aoi-title">AOI 1: Kod Alanı</div>
+          <pre id="codeBlock"></pre>
+        </div>
+
+        <div>
+          <div class="aoi" data-aoi="Soru Yönergesi" style="margin-bottom:16px;">
+            <div class="aoi-title">AOI 2: Soru Yönergesi</div>
+            <p id="taskPrompt">Bu Python kodunun çıktısı ne olur?</p>
+            <p class="small">Öğrenciden özellikle satır numaralarını kullanarak açıklama yapması istenir. Örn: “3. satırda x değişiyor.”</p>
+          </div>
+
+          <div class="aoi" data-aoi="Cevap Alanı">
+            <div class="aoi-title">AOI 3: Cevap Alanı</div>
+            <label>Tahmin edilen çıktı:</label>
+            <textarea id="answer" style="width:100%; height:120px;" placeholder="Öğrenci çıktıyı buraya yazar..."></textarea>
+            <label>Sesli düşünme / gözlem notu:</label>
+            <textarea id="thinkAloudNote" style="width:100%; height:120px;" placeholder="Araştırmacı gözlem notu veya kısa protokol notu..."></textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Canlı Veri Özeti</h2>
+      <p>Toplam gaze kayıt sayısı: <span id="recordCount">0</span></p>
+      <p>Task completion time: <span id="completionTime">0</span> sn</p>
+      <p>Step count: <span id="stepCount">0</span></p>
+      <p>Help count: <span id="helpCount">0</span></p>
+      <p>Total fixation/focus count: <span id="fixationCount">0</span></p>
+      <table>
+        <thead>
+          <tr>
+            <th>AOI</th>
+            <th>Gaze Count</th>
+            <th>Dwell Time Approx. ms</th>
+            <th>Fixation Count</th>
+          </tr>
+        </thead>
+        <tbody id="aoiSummary"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <div id="gazeDot"></div>
+
+  <div id="calibrationScreen">
+    <div id="calibrationInstruction">Kırmızı noktaya bakıp tıklayınız. Her noktaya 3 kez tıklamanız önerilir.</div>
+  </div>
+
+  <script>
+    const tasks = [
+      {
+        title: "Görev 1 - Atama ve Güncelleme",
+        atom: "Assignment / Variable Update",
+        prompt: "Aşağıdaki Python kodunun çıktısı ne olur? Satır numaralarını kullanarak sesli açıklayınız.",
+        code: [
+          "x = 4",
+          "y = x",
+          "x = x + 3",
+          "print(x, y)"
+        ]
+      },
+      {
+        title: "Görev 2 - Koşullu İfade",
+        atom: "Conditional Expression",
+        prompt: "Koşullu ifadeyi takip ederek çıktıyı tahmin ediniz.",
+        code: [
+          "score = 65",
+          "result = 'pass' if score >= 60 else 'fail'",
+          "print(result)"
+        ]
+      },
+      {
+        title: "Görev 3 - Mantıksal Kısa Devre",
+        atom: "Logic as Control Flow / Short-Circuit",
+        prompt: "and ifadesinin ikinci kısmının çalışıp çalışmayacağını düşünerek çıktıyı tahmin ediniz.",
+        code: [
+          "x = 0",
+          "y = 5",
+          "result = x != 0 and y / x > 1",
+          "print(result)"
+        ]
+      },
+      {
+        title: "Görev 4 - Zincirli Karşılaştırma",
+        atom: "Implicit Predicate / Chained Comparison",
+        prompt: "Python’daki zincirli karşılaştırma yapısını dikkate alarak çıktıyı tahmin ediniz.",
+        code: [
+          "a = 3",
+          "b = 5",
+          "c = 4",
+          "print(a < b > c)"
+        ]
+      },
+      {
+        title: "Görev 5 - Liste İndeksi",
+        atom: "Indexing / Off-by-One Risk",
+        prompt: "Liste indekslerini takip ederek çıktıyı tahmin ediniz.",
+        code: [
+          "numbers = [10, 20, 30, 40]",
+          "i = 2",
+          "print(numbers[i])"
+        ]
+      },
+      {
+        title: "Görev 6 - Negatif İndeks",
+        atom: "Negative Indexing",
+        prompt: "Negatif indeksin hangi elemana karşılık geldiğini açıklayarak çıktıyı tahmin ediniz.",
+        code: [
+          "letters = ['a', 'b', 'c', 'd']",
+          "print(letters[-1])",
+          "print(letters[-3])"
+        ]
+      },
+      {
+        title: "Görev 7 - Dilimleme",
+        atom: "Slicing",
+        prompt: "Dilimlemenin başlangıç ve bitiş indekslerini takip ederek çıktıyı tahmin ediniz.",
+        code: [
+          "text = 'PYTHON'",
+          "part = text[1:4]",
+          "print(part)"
+        ]
+      },
+      {
+        title: "Görev 8 - Döngüde Biriktirme",
+        atom: "Loop Accumulation",
+        prompt: "Her döngü adımında total değişkeninin nasıl değiştiğini sesli açıklayınız.",
+        code: [
+          "total = 0",
+          "for i in range(1, 4):",
+          "    total = total + i",
+          "print(total)"
+        ]
+      },
+      {
+        title: "Görev 9 - İç İçe Koşul",
+        atom: "Nested Condition",
+        prompt: "Girintileri ve koşul akışını takip ederek çıktıyı tahmin ediniz.",
+        code: [
+          "x = 7",
+          "if x > 5:",
+          "    if x % 2 == 0:",
+          "        print('A')",
+          "    else:",
+          "        print('B')",
+          "else:",
+          "    print('C')"
+        ]
+      },
+      {
+        title: "Görev 10 - Fonksiyon ve Dönüş Değeri",
+        atom: "Function Return",
+        prompt: "Fonksiyonun hangi değeri döndürdüğünü takip ederek çıktıyı tahmin ediniz.",
+        code: [
+          "def add_one(n):",
+          "    n = n + 1",
+          "    return n",
+          "x = 4",
+          "y = add_one(x)",
+          "print(x, y)"
+        ]
+      },
+      {
+        title: "Görev 11 - Liste Referansı",
+        atom: "Aliasing / Reference",
+        prompt: "a ve b listelerinin aynı nesneyi gösterip göstermediğini düşünerek çıktıyı tahmin ediniz.",
+        code: [
+          "a = [1, 2]",
+          "b = a",
+          "b.append(3)",
+          "print(a)"
+        ]
+      },
+      {
+        title: "Görev 12 - Varsayılan Parametre",
+        atom: "Default Mutable Argument",
+        prompt: "Fonksiyon iki kez çağrıldığında liste içeriğinin nasıl değiştiğini sesli açıklayınız.",
+        code: [
+          "def add_item(x, items=[]):",
+          "    items.append(x)",
+          "    return items",
+          "print(add_item(1))",
+          "print(add_item(2))"
+        ]
+      }
+    ];
+
+    let currentTaskIndex = 0;
+    let isRecording = false;
+    let gazeData = [];
+    let fixationData = [];
+    let transitions = [];
+    let latestGaze = null;
+    let recordingInterval = null;
+    let calibrationIndex = 0;
+    let startTime = null;
+    let endTime = null;
+    let stepCount = 0;
+    let helpCount = 0;
+    let previousAOI = null;
+    let previousGrid = null;
+
+    const sampleIntervalMs = 100;
+    const fixationDurationThresholdMs = 200;
+    const fixationRadiusPx = 60;
+
+    const calibrationPoints = [
+      [10, 10], [50, 10], [90, 10],
+      [10, 50], [50, 50], [90, 50],
+      [10, 90], [50, 90], [90, 90]
+    ];
+
+    function initTasks() {
+      const selector = document.getElementById("taskSelector");
+      selector.innerHTML = "";
+      tasks.forEach((task, index) => {
+        const opt = document.createElement("option");
+        opt.value = index;
+        opt.textContent = `${index + 1}. ${task.title}`;
+        selector.appendChild(opt);
+      });
+      loadTask(0);
+    }
+
+    function loadSelectedTask() {
+      const index = parseInt(document.getElementById("taskSelector").value, 10);
+      loadTask(index);
+    }
+
+    function loadTask(index) {
+      currentTaskIndex = index;
+      const task = tasks[index];
+      document.getElementById("taskSelector").value = index;
+      document.getElementById("taskInfo").textContent = `Görev ${index + 1} / ${tasks.length}`;
+      document.getElementById("atomInfo").textContent = task.atom;
+      document.getElementById("taskPrompt").textContent = task.prompt;
+      document.getElementById("taskName").value = task.title;
+      document.getElementById("answer").value = "";
+      document.getElementById("thinkAloudNote").value = "";
+      renderCode(task.code);
+      setStatus(`${task.title} yüklendi.`);
+    }
+
+    function renderCode(lines) {
+      const codeBlock = document.getElementById("codeBlock");
+      codeBlock.innerHTML = "";
+      lines.forEach((line, index) => {
+        const row = document.createElement("div");
+        row.className = "code-line";
+        const no = document.createElement("span");
+        no.className = "line-no";
+        no.textContent = index + 1;
+        const code = document.createElement("span");
+        code.className = "line-code";
+        code.textContent = line || " ";
+        row.appendChild(no);
+        row.appendChild(code);
+        codeBlock.appendChild(row);
+      });
+    }
+
+    function previousTask() {
+      if (currentTaskIndex > 0) loadTask(currentTaskIndex - 1);
+    }
+
+    function nextTask() {
+      if (currentTaskIndex < tasks.length - 1) loadTask(currentTaskIndex + 1);
+    }
+
+    function setStatus(message) { document.getElementById("status").textContent = "Durum: " + message; }
+
+    async function startWebGazer() {
+      setStatus("Kamera başlatılıyor. Tarayıcı kamera izni isteyebilir.");
+      await webgazer
+        .setRegression("ridge")
+        .setTracker("clmtrackr")
+        .setGazeListener(function(data, elapsedTime) {
+          if (!data) return;
+          latestGaze = { x: data.x, y: data.y, elapsedTime: elapsedTime };
+          const dot = document.getElementById("gazeDot");
+          dot.style.display = "block";
+          dot.style.left = data.x + "px";
+          dot.style.top = data.y + "px";
+        })
+        .begin();
+      webgazer.showVideoPreview(true).showPredictionPoints(false);
+      setStatus("Kamera aktif. Şimdi kalibrasyon yapabilirsiniz.");
+    }
+
+    function startCalibration() {
+      const screen = document.getElementById("calibrationScreen");
+      screen.style.display = "block";
+      calibrationIndex = 0;
+      showCalibrationPoint();
+      setStatus("Kalibrasyon başladı.");
+    }
+
+    function showCalibrationPoint() {
+      const screen = document.getElementById("calibrationScreen");
+      const oldPoint = document.querySelector(".calibration-point");
+      if (oldPoint) oldPoint.remove();
+      if (calibrationIndex >= calibrationPoints.length) {
+        screen.style.display = "none";
+        setStatus("Kalibrasyon tamamlandı. Kaydı başlatabilirsiniz.");
+        return;
+      }
+      const [xPercent, yPercent] = calibrationPoints[calibrationIndex];
+      const point = document.createElement("div");
+      point.className = "calibration-point";
+      point.style.left = xPercent + "%";
+      point.style.top = yPercent + "%";
+      let clicks = 0;
+      point.onclick = function() {
+        clicks++;
+        if (clicks >= 3) { calibrationIndex++; showCalibrationPoint(); }
+      };
+      screen.appendChild(point);
+    }
+
+    function startRecording() {
+      const participantId = document.getElementById("participantId").value.trim();
+      if (!participantId) { alert("Lütfen önce katılımcı kodunu giriniz."); return; }
+      isRecording = true;
+      startTime = new Date();
+      endTime = null;
+      setStatus("Kayıt başladı. Öğrenciden problem çözümünü sesli yapmasını isteyiniz.");
+      recordingInterval = setInterval(recordGazeSample, sampleIntervalMs);
+    }
+
+    function recordGazeSample() {
+      if (!isRecording || !latestGaze) return;
+      const participantId = document.getElementById("participantId").value.trim();
+      const task = tasks[currentTaskIndex];
+      const taskName = task.title;
+      const atomType = task.atom;
+      const aoi = detectAOI(latestGaze.x, latestGaze.y);
+      const grid = detectGrid7x7(latestGaze.x, latestGaze.y);
+      const now = new Date();
+      const elapsedFromStartMs = startTime ? now - startTime : 0;
+
+      if (previousAOI && previousAOI !== aoi) {
+        transitions.push({
+          participantId, taskName, atomType,
+          timestamp: now.toISOString(),
+          fromAOI: previousAOI,
+          toAOI: aoi,
+          fromGrid: previousGrid,
+          toGrid: grid
+        });
+      }
+
+      previousAOI = aoi;
+      previousGrid = grid;
+
+      gazeData.push({
+        participantId,
+        taskNo: currentTaskIndex + 1,
+        taskName,
+        atomType,
+        timestamp: now.toISOString(),
+        elapsedFromStartMs,
+        webgazerElapsedTime: Math.round(latestGaze.elapsedTime),
+        x: Math.round(latestGaze.x),
+        y: Math.round(latestGaze.y),
+        aoi,
+        grid7x7: grid,
+        stepCount,
+        helpCount,
+        taskCompletion: document.getElementById("taskCompletion").value,
+        answerText: document.getElementById("answer").value.replace(/\n/g, " "),
+        thinkAloudNote: document.getElementById("thinkAloudNote").value.replace(/\n/g, " ")
+      });
+
+      detectFixations();
+      updateSummary();
+    }
+
+    function stopRecording() {
+      isRecording = false;
+      endTime = new Date();
+      if (recordingInterval) clearInterval(recordingInterval);
+      detectFixations(true);
+      updateSummary();
+      setStatus("Kayıt durduruldu.");
+    }
+
+    function markHelp() {
+      helpCount++;
+      document.getElementById("taskCompletion").value = "Completed with assistance";
+      updateSummary();
+    }
+
+    function markStep() { stepCount++; updateSummary(); }
+
+    document.addEventListener("click", function(e) {
+      if (isRecording && !e.target.classList.contains("calibration-point")) stepCount++;
+    });
+
+    document.addEventListener("keydown", function() {
+      if (isRecording) stepCount++;
+    });
+
+    function detectAOI(x, y) {
+      const areas = document.querySelectorAll(".aoi");
+      for (const area of areas) {
+        const rect = area.getBoundingClientRect();
+        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return area.dataset.aoi;
+      }
+      return "AOI Dışı";
+    }
+
+    function detectGrid7x7(x, y) {
+      const col = Math.min(7, Math.max(1, Math.floor(x / (window.innerWidth / 7)) + 1));
+      const row = Math.min(7, Math.max(1, Math.floor(y / (window.innerHeight / 7)) + 1));
+      return `R${row}C${col}`;
+    }
+
+    function detectFixations(force=false) {
+      if (gazeData.length < 3) return;
+      let cluster = [];
+      for (let i = gazeData.length - 1; i >= 0; i--) {
+        const p = gazeData[i];
+        if (cluster.length === 0) { cluster.push(p); continue; }
+        const cx = cluster.reduce((s, d) => s + d.x, 0) / cluster.length;
+        const cy = cluster.reduce((s, d) => s + d.y, 0) / cluster.length;
+        const dist = Math.sqrt(Math.pow(p.x - cx, 2) + Math.pow(p.y - cy, 2));
+        if (dist <= fixationRadiusPx) cluster.push(p); else break;
+      }
+      const duration = cluster.length * sampleIntervalMs;
+      if (duration >= fixationDurationThresholdMs) {
+        const last = cluster[0];
+        const fixationKey = `${last.participantId}_${last.taskNo}_${last.aoi}_${Math.round(last.elapsedFromStartMs / fixationDurationThresholdMs)}`;
+        if (!fixationData.some(f => f.fixationKey === fixationKey)) {
+          fixationData.push({
+            fixationKey,
+            participantId: last.participantId,
+            taskNo: last.taskNo,
+            taskName: last.taskName,
+            atomType: last.atomType,
+            timestamp: last.timestamp,
+            startElapsedMs: cluster[cluster.length - 1].elapsedFromStartMs,
+            endElapsedMs: last.elapsedFromStartMs,
+            durationMs: duration,
+            meanX: Math.round(cluster.reduce((s, d) => s + d.x, 0) / cluster.length),
+            meanY: Math.round(cluster.reduce((s, d) => s + d.y, 0) / cluster.length),
+            aoi: last.aoi,
+            grid7x7: last.grid7x7
+          });
+        }
+      }
+    }
+
+    function getCompletionSeconds() {
+      if (!startTime) return 0;
+      const t = endTime ? endTime - startTime : new Date() - startTime;
+      return Math.round(t / 1000);
+    }
+
+    function updateSummary() {
+      document.getElementById("recordCount").textContent = gazeData.length;
+      document.getElementById("completionTime").textContent = getCompletionSeconds();
+      document.getElementById("stepCount").textContent = stepCount;
+      document.getElementById("helpCount").textContent = helpCount;
+      document.getElementById("fixationCount").textContent = fixationData.length;
+
+      const counts = {};
+      const dwell = {};
+      const fixCounts = {};
+
+      gazeData.forEach(row => {
+        counts[row.aoi] = (counts[row.aoi] || 0) + 1;
+        dwell[row.aoi] = (dwell[row.aoi] || 0) + sampleIntervalMs;
+      });
+
+      fixationData.forEach(row => {
+        fixCounts[row.aoi] = (fixCounts[row.aoi] || 0) + 1;
+      });
+
+      const tbody = document.getElementById("aoiSummary");
+      tbody.innerHTML = "";
+      Object.keys(counts).forEach(aoi => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${aoi}</td><td>${counts[aoi]}</td><td>${dwell[aoi] || 0}</td><td>${fixCounts[aoi] || 0}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function csvDownload(rows, headers, filename) {
+      if (rows.length === 0) { alert("Henüz kayıtlı veri yok."); return; }
+      const csvRows = [headers.join(",")];
+      rows.forEach(row => {
+        const values = headers.map(header => '"' + String(row[header] ?? "").replace(/"/g, '""') + '"');
+        csvRows.push(values.join(","));
+      });
+      const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function downloadRawCSV() {
+      const headers = ["participantId","taskNo","taskName","atomType","timestamp","elapsedFromStartMs","webgazerElapsedTime","x","y","aoi","grid7x7","stepCount","helpCount","taskCompletion","answerText","thinkAloudNote"];
+      csvDownload(gazeData, headers, "raw_gaze_python_tasks.csv");
+    }
+
+    function downloadTransitionsCSV() {
+      const headers = ["participantId","taskName","atomType","timestamp","fromAOI","toAOI","fromGrid","toGrid"];
+      csvDownload(transitions, headers, "scan_path_transitions_python_tasks.csv");
+    }
+
+    function downloadSummaryCSV() {
+      if (gazeData.length === 0) { alert("Henüz kayıtlı veri yok."); return; }
+      const participantId = document.getElementById("participantId").value.trim();
+      const completionTimeSec = getCompletionSeconds();
+      const minimumStep = 1;
+      const efficiency = minimumStep > 0 ? (completionTimeSec / minimumStep).toFixed(2) : "";
+
+      const grouped = {};
+      gazeData.forEach(d => {
+        const key = `${d.taskNo}_${d.aoi}`;
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(d);
+      });
+
+      const summaryRows = Object.keys(grouped).map(key => {
+        const aoiRows = grouped[key];
+        const first = aoiRows[0];
+        const aoiFix = fixationData.filter(f => f.taskNo === first.taskNo && f.aoi === first.aoi);
+        return {
+          participantId,
+          taskNo: first.taskNo,
+          taskName: first.taskName,
+          atomType: first.atomType,
+          taskCompletion: first.taskCompletion,
+          completionTimeSec,
+          stepCount,
+          helpCount,
+          efficiency_TimeDivMinimumStep: efficiency,
+          totalGazeSamples: gazeData.length,
+          totalFixationCount: fixationData.length,
+          totalTransitionCount: transitions.length,
+          aoi: first.aoi,
+          aoiGazeCount: aoiRows.length,
+          aoiDwellTimeMs: aoiRows.length * sampleIntervalMs,
+          aoiFixationCount: aoiFix.length,
+          aoiMeanFixationDurationMs: aoiFix.length ? Math.round(aoiFix.reduce((s, f) => s + f.durationMs, 0) / aoiFix.length) : 0
+        };
+      });
+
+      const headers = ["participantId","taskNo","taskName","atomType","taskCompletion","completionTimeSec","stepCount","helpCount","efficiency_TimeDivMinimumStep","totalGazeSamples","totalFixationCount","totalTransitionCount","aoi","aoiGazeCount","aoiDwellTimeMs","aoiFixationCount","aoiMeanFixationDurationMs"];
+      csvDownload(summaryRows, headers, "summary_efficiency_aoi_python_tasks.csv");
+    }
+
+    function resetData() {
+      if (!confirm("Tüm kayıtlı veriler silinsin mi?")) return;
+      gazeData = [];
+      fixationData = [];
+      transitions = [];
+      stepCount = 0;
+      helpCount = 0;
+      startTime = null;
+      endTime = null;
+      previousAOI = null;
+      previousGrid = null;
+      updateSummary();
+      setStatus("Veriler temizlendi.");
+    }
+
+    window.onload = initTasks;
+    window.onbeforeunload = function() { try { webgazer.end(); } catch (e) {} };
+  </script>
+</body>
+</html>
