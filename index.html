@@ -3,8 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Python Kod Anlama, Sesli Düşünme ve Webcam Gaze Tracking Araştırması</title>
-  <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
+  <title>Python Kod Anlama - MediaPipe Webcam Gaze Tracking</title>
+
+  <!-- WebGazer YOK. Bu sürüm MediaPipe FaceMesh + iris noktaları ile çalışır. -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
   <style>
     body { margin: 0; font-family: Arial, sans-serif; background: #f5f5f5; color: #222; }
     header { background: #222; color: white; padding: 14px 24px; font-size: 20px; font-weight: bold; }
@@ -16,10 +20,11 @@
     button.danger { background: #b3261e; }
     button.success { background: #16803c; }
     input, select, textarea { padding: 9px; margin: 6px; border: 1px solid #aaa; border-radius: 6px; font-size: 15px; }
-    #calibrationScreen { position: fixed; inset: 0; background: white; display: none; z-index: 9998; }
-    .calibration-point { width: 28px; height: 28px; background: #d00000; border-radius: 50%; position: absolute; transform: translate(-50%, -50%); box-shadow: 0 0 0 10px rgba(208,0,0,0.15); }
-    #calibrationInstruction { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #222; color: white; padding: 12px 18px; border-radius: 8px; z-index: 9999; max-width: 760px; text-align: center; }
-    #calibrationCounter { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: #2d6cdf; color: white; padding: 10px 16px; border-radius: 8px; z-index: 9999; }
+    #status { font-weight: bold; color: #2d6cdf; }
+    .small { font-size: 13px; color: #555; }
+    .warning { color: #b3261e; font-weight: bold; }
+    .task-nav { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .task-pill { background: #eee; color: #222; border-radius: 20px; padding: 6px 10px; font-size: 13px; }
     #experimentArea { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 16px; min-height: 460px; }
     .aoi { border: 3px solid #444; border-radius: 10px; padding: 18px; background: #fff; position: relative; }
     .aoi-title { font-weight: bold; margin-bottom: 12px; color: #2d6cdf; }
@@ -27,20 +32,28 @@
     .code-line { display: grid; grid-template-columns: 38px 1fr; column-gap: 12px; font-family: Consolas, Monaco, monospace; }
     .line-no { color: #777; text-align: right; user-select: none; border-right: 1px solid #ccc; padding-right: 8px; }
     .line-code { white-space: pre; }
-    #gazeDot { position: fixed; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.75); border-radius: 50%; pointer-events: none; z-index: 9997; display: none; transform: translate(-50%, -50%); }
-    #heatmapCanvas { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 9996; display: none; }
-    #status { font-weight: bold; color: #2d6cdf; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
     th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
     th { background: #eeeeee; }
-    .small { font-size: 13px; color: #555; }
-    .warning { color: #b3261e; font-weight: bold; }
-    .task-nav { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-    .task-pill { background: #eee; color: #222; border-radius: 20px; padding: 6px 10px; font-size: 13px; }
+
+    #videoBox { position: fixed; left: 12px; top: 60px; width: 250px; height: 190px; z-index: 9995; border: 3px solid #111; background: #000; overflow: hidden; }
+    #inputVideo { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    #faceCanvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform: scaleX(-1); pointer-events: none; }
+    #gazeDot { position: fixed; width: 16px; height: 16px; background: rgba(255, 0, 0, 0.85); border-radius: 50%; pointer-events: none; z-index: 9997; display: none; transform: translate(-50%, -50%); box-shadow: 0 0 0 7px rgba(255,0,0,0.16); }
+    #heatmapCanvas { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 9996; display: none; }
+    #calibrationScreen { position: fixed; inset: 0; background: white; display: none; z-index: 9998; }
+    .calibration-point { width: 30px; height: 30px; background: #d00000; border-radius: 50%; position: absolute; transform: translate(-50%, -50%); box-shadow: 0 0 0 12px rgba(208,0,0,0.15); }
+    #calibrationInstruction { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #222; color: white; padding: 12px 18px; border-radius: 8px; z-index: 9999; max-width: 820px; text-align: center; }
+    #calibrationCounter { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: #2d6cdf; color: white; padding: 10px 16px; border-radius: 8px; z-index: 9999; }
   </style>
 </head>
 <body>
   <header>Python Kod Anlama, Sesli Düşünme ve Webcam Gaze Tracking Araştırması</header>
+
+  <div id="videoBox">
+    <video id="inputVideo" autoplay playsinline muted></video>
+    <canvas id="faceCanvas"></canvas>
+  </div>
 
   <main>
     <section class="panel">
@@ -51,7 +64,7 @@
       <select id="taskSelector" onchange="loadSelectedTask()"></select>
       <p id="status">Durum: Hazır</p>
 
-      <button onclick="startWebGazer()">1. Kamera ve Göz Takibini Başlat</button>
+      <button onclick="startTracker()">1. Kamera ve Göz Takibini Başlat</button>
       <button onclick="startCalibration()">2. Otomatik Kalibrasyon</button>
       <button onclick="startRecording()">3. Gaze + Ses Kaydını Başlat</button>
       <button class="secondary" onclick="stopRecording()">Kaydı Durdur</button>
@@ -65,7 +78,7 @@
       <button onclick="downloadTranscript()">Ses Metnini İndir</button>
       <button class="danger" onclick="resetData()">Veriyi Temizle</button>
 
-      <p class="small">Not: Otomatik kalibrasyonda öğrenci kırmızı noktaya bakar; sistem tıklama istemeden kalibrasyon örneklerini alır. Ses kaydı için tarayıcı mikrofon izni isteyecektir.</p>
+      <p class="small">Not: Bu sürüm WebGazer kullanmaz. MediaPipe FaceMesh/iris noktaları ile yaklaşık webcam gaze tracking yapar.</p>
       <p class="small warning">Veriler merkezi sunucuya gönderilmez. CSV, ses ve metin dosyaları bu bilgisayardan indirilir.</p>
     </section>
 
@@ -107,6 +120,7 @@
       <p>Task completion time: <span id="completionTime">0</span> sn</p>
       <p>Step count: <span id="stepCount">0</span></p>
       <p>Total fixation/focus count: <span id="fixationCount">0</span></p>
+      <p>Kalibrasyon durumu: <span id="calibrationStatus">Hazır değil</span></p>
       <p>Ses kaydı durumu: <span id="audioStatus">Hazır değil</span></p>
       <p>Konuşma metni durumu: <span id="speechStatus">Hazır değil</span></p>
       <table>
@@ -148,21 +162,28 @@
     ];
 
     let currentTaskIndex = 0;
+    let isTrackerRunning = false;
+    let isCalibrated = false;
     let isRecording = false;
+    let currentFeature = null;
+    let lastGaze = null;
+    let lastRecordedAt = 0;
+    let camera = null;
+    let faceMesh = null;
+    let modelX = null;
+    let modelY = null;
+    let calibrationSamples = [];
+    let calibrationIndex = 0;
+
     let gazeData = [];
     let fixationData = [];
     let transitions = [];
-    let latestGaze = null;
-    let recordingInterval = null;
-    let isCalibrated = false;
-    let calibrationIndex = 0;
     let startTime = null;
     let endTime = null;
     let stepCount = 0;
     let previousAOI = null;
     let previousGrid = null;
     let heatmapVisible = false;
-    let lastRecordedAt = 0;
 
     let mediaRecorder = null;
     let audioChunks = [];
@@ -174,9 +195,8 @@
 
     const sampleIntervalMs = 100;
     const fixationDurationThresholdMs = 200;
-    const fixationRadiusPx = 90;
-    const calibrationSamplesPerPoint = 30;
-    const calibrationSampleIntervalMs = 140;
+    const fixationRadiusPx = 95;
+    const calibrationSamplesPerPoint = 45;
 
     const calibrationPoints = [
       [10, 10], [50, 10], [90, 10],
@@ -186,7 +206,6 @@
 
     function initTasks() {
       const selector = document.getElementById("taskSelector");
-      if (!selector) return;
       selector.innerHTML = "";
       tasks.forEach((task, index) => {
         const opt = document.createElement("option");
@@ -198,10 +217,10 @@
       loadTask(0);
     }
 
-    function loadSelectedTask() {
-      const index = parseInt(document.getElementById("taskSelector").value, 10);
-      loadTask(index);
-    }
+    function loadSelectedTask() { loadTask(parseInt(document.getElementById("taskSelector").value, 10)); }
+    function previousTask() { if (currentTaskIndex > 0) loadTask(currentTaskIndex - 1); }
+    function nextTask() { if (currentTaskIndex < tasks.length - 1) loadTask(currentTaskIndex + 1); }
+    function setStatus(message) { document.getElementById("status").textContent = "Durum: " + message; }
 
     function loadTask(index) {
       currentTaskIndex = index;
@@ -234,72 +253,141 @@
       });
     }
 
-    function previousTask() { if (currentTaskIndex > 0) loadTask(currentTaskIndex - 1); }
-    function nextTask() { if (currentTaskIndex < tasks.length - 1) loadTask(currentTaskIndex + 1); }
-    function setStatus(message) { document.getElementById("status").textContent = "Durum: " + message; }
-
-    async function startWebGazer() {
-      setStatus("Kamera başlatılıyor. Tarayıcı kamera izni isteyebilir.");
-      latestGaze = null;
-      isCalibrated = false;
+    async function startTracker() {
+      setStatus("MediaPipe kamera ve yüz/iris algılama başlatılıyor...");
+      const video = document.getElementById("inputVideo");
+      const canvas = document.getElementById("faceCanvas");
+      const ctx = canvas.getContext("2d");
 
       try {
-        await webgazer
-          .setRegression("weightedRidge")
-          .setGazeListener(function(data, elapsedTime) {
-            if (!data || typeof data.x !== "number" || typeof data.y !== "number") return;
-            updateGazePoint(data.x, data.y, elapsedTime);
-          })
-          .begin();
+        faceMesh = new FaceMesh({
+          locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+        });
 
-        webgazer.showVideoPreview(true);
-        webgazer.showPredictionPoints(true);
-        webgazer.showFaceOverlay(true);
-        webgazer.showFaceFeedbackBox(true);
+        faceMesh.setOptions({
+          maxNumFaces: 1,
+          refineLandmarks: true,
+          minDetectionConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
 
-        setStatus("Kamera aktif. Önce otomatik kalibrasyonu tamamlayın; sonra kaydı başlatın.");
+        faceMesh.onResults((results) => {
+          canvas.width = canvas.clientWidth;
+          canvas.height = canvas.clientHeight;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) {
+            currentFeature = null;
+            return;
+          }
+
+          const landmarks = results.multiFaceLandmarks[0];
+          drawSimpleFace(ctx, landmarks, canvas.width, canvas.height);
+          currentFeature = extractGazeFeature(landmarks);
+
+          if (isCalibrated && modelX && modelY && currentFeature) {
+            const predX = predict(modelX, currentFeature);
+            const predY = predict(modelY, currentFeature);
+            const x = clamp(predX, 0, window.innerWidth);
+            const y = clamp(predY, 0, window.innerHeight);
+            updateGazePoint(x, y);
+          }
+        });
+
+        camera = new Camera(video, {
+          onFrame: async () => { await faceMesh.send({ image: video }); },
+          width: 640,
+          height: 480
+        });
+
+        await camera.start();
+        isTrackerRunning = true;
+        setStatus("Kamera aktif. Yüz ve iris noktaları algılanınca otomatik kalibrasyon yapınız.");
       } catch (error) {
         console.error(error);
-        setStatus("WebGazer başlatılamadı. Kamera iznini, HTTPS bağlantısını ve tarayıcı konsolunu kontrol edin.");
-        alert("WebGazer başlatılamadı. Lütfen Chrome kullanın, kamera iznini verin ve sayfayı Ctrl+F5 ile yenileyin.");
+        alert("Kamera/MediaPipe başlatılamadı. Chrome, HTTPS ve kamera izinlerini kontrol edin.");
+        setStatus("Kamera/MediaPipe başlatılamadı.");
       }
     }
 
-    function updateGazePointazePoint(x, y, elapsedTime) {
-      latestGaze = { x, y, elapsedTime };
-      const dot = document.getElementById("gazeDot");
-      dot.style.display = "block";
-      dot.style.left = x + "px";
-      dot.style.top = y + "px";
+    function drawSimpleFace(ctx, lm, w, h) {
+      const points = [33, 133, 362, 263, 468, 473];
+      ctx.fillStyle = "rgba(0,255,0,0.9)";
+      points.forEach(i => {
+        const p = lm[i];
+        if (!p) return;
+        ctx.beginPath();
+        ctx.arc(p.x * w, p.y * h, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
 
-      if (isRecording) {
-        recordGazeSample(latestGaze);
-      }
+      const xs = lm.map(p => p.x * w);
+      const ys = lm.map(p => p.y * h);
+      const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+      ctx.strokeStyle = "rgba(0,255,0,0.9)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
     }
+
+    function extractGazeFeature(lm) {
+      const leftOuter = lm[33], leftInner = lm[133], rightInner = lm[362], rightOuter = lm[263];
+      const leftIris = lm[468], rightIris = lm[473];
+      const nose = lm[1], faceLeft = lm[234], faceRight = lm[454], chin = lm[152], forehead = lm[10];
+      if (!leftOuter || !leftInner || !rightInner || !rightOuter || !leftIris || !rightIris || !nose || !faceLeft || !faceRight) return null;
+
+      const leftEyeWidth = dist(leftOuter, leftInner) || 0.001;
+      const rightEyeWidth = dist(rightInner, rightOuter) || 0.001;
+      const faceWidth = dist(faceLeft, faceRight) || 0.001;
+      const faceHeight = forehead && chin ? dist(forehead, chin) || 0.001 : faceWidth;
+
+      const leftEyeCenter = midpoint(leftOuter, leftInner);
+      const rightEyeCenter = midpoint(rightInner, rightOuter);
+      const eyeCenter = midpoint(leftEyeCenter, rightEyeCenter);
+
+      const lx = (leftIris.x - leftEyeCenter.x) / leftEyeWidth;
+      const ly = (leftIris.y - leftEyeCenter.y) / leftEyeWidth;
+      const rx = (rightIris.x - rightEyeCenter.x) / rightEyeWidth;
+      const ry = (rightIris.y - rightEyeCenter.y) / rightEyeWidth;
+      const noseX = (nose.x - eyeCenter.x) / faceWidth;
+      const noseY = (nose.y - eyeCenter.y) / faceHeight;
+
+      return [1, lx, ly, rx, ry, noseX, noseY];
+    }
+
+    function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+    function midpoint(a, b) { return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }; }
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
     function startCalibration() {
-      if (typeof webgazer === "undefined") { alert("Önce kamerayı başlatınız."); return; }
-      const screen = document.getElementById("calibrationScreen");
-      screen.style.display = "block";
+      if (!isTrackerRunning) { alert("Önce kamera ve göz takibini başlatınız."); return; }
+      if (!currentFeature) { alert("Yüz/iris algılanmadı. Işığı artırın ve kameraya düz bakın."); return; }
+
+      calibrationSamples = [];
       calibrationIndex = 0;
-      showAutomaticCalibrationPoint();
-      setStatus("Otomatik kalibrasyon başladı. Öğrenci sadece kırmızı noktaya baksın.");
+      isCalibrated = false;
+      modelX = null;
+      modelY = null;
+      lastGaze = null;
+      document.getElementById("calibrationStatus").textContent = "Kalibrasyon yapılıyor";
+      document.getElementById("calibrationScreen").style.display = "block";
+      showCalibrationPoint();
     }
 
-    function showAutomaticCalibrationPoint() {
+    function showCalibrationPoint() {
       const screen = document.getElementById("calibrationScreen");
       const oldPoint = document.querySelector(".calibration-point");
       if (oldPoint) oldPoint.remove();
 
       if (calibrationIndex >= calibrationPoints.length) {
         screen.style.display = "none";
-        isCalibrated = true;
-        latestGaze = null;
-        setStatus("Otomatik kalibrasyon tamamlandı. Şimdi 3-5 saniye ekrana bakın; küçük gaze noktası görünürse kaydı başlatın.");
+        fitCalibrationModel();
         return;
       }
 
       const [xPercent, yPercent] = calibrationPoints[calibrationIndex];
+      const targetX = window.innerWidth * xPercent / 100;
+      const targetY = window.innerHeight * yPercent / 100;
+
       const point = document.createElement("div");
       point.className = "calibration-point";
       point.style.left = xPercent + "%";
@@ -307,118 +395,100 @@
       screen.appendChild(point);
 
       const counter = document.getElementById("calibrationCounter");
-      counter.textContent = `Nokta ${calibrationIndex + 1} / ${calibrationPoints.length}: Lütfen kırmızı noktaya bakınız.`;
+      counter.textContent = `Nokta ${calibrationIndex + 1} / ${calibrationPoints.length}: Kırmızı noktaya bakınız.`;
 
+      let count = 0;
       setTimeout(() => {
-        const rect = point.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        let sampleCount = 0;
-
-        const sampler = setInterval(() => {
-          try { webgazer.recordScreenPosition(centerX, centerY, "click"); } catch (e) {}
-          sampleCount++;
-          counter.textContent = `Nokta ${calibrationIndex + 1} / ${calibrationPoints.length}: Örnek alınıyor ${sampleCount} / ${calibrationSamplesPerPoint}`;
-
-          if (sampleCount >= calibrationSamplesPerPoint) {
-            clearInterval(sampler);
-            calibrationIndex++;
-            setTimeout(showAutomaticCalibrationPoint, 350);
+        const timer = setInterval(() => {
+          if (currentFeature) {
+            calibrationSamples.push({ features: [...currentFeature], x: targetX, y: targetY });
+            count++;
+            counter.textContent = `Nokta ${calibrationIndex + 1} / ${calibrationPoints.length}: Örnek ${count} / ${calibrationSamplesPerPoint}`;
           }
-        }, calibrationSampleIntervalMs);
-      }, 700);
+
+          if (count >= calibrationSamplesPerPoint) {
+            clearInterval(timer);
+            calibrationIndex++;
+            setTimeout(showCalibrationPoint, 300);
+          }
+        }, 60);
+      }, 650);
     }
 
-    async function startAudioRecording() {
-      audioChunks = [];
-      audioBlob = null;
-      audioUrl = null;
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        mediaRecorder = new MediaRecorder(stream);
-        mediaRecorder.ondataavailable = event => {
-          if (event.data.size > 0) audioChunks.push(event.data);
-        };
-        mediaRecorder.onstop = () => {
-          audioBlob = new Blob(audioChunks, { type: "audio/webm" });
-          audioUrl = URL.createObjectURL(audioBlob);
-          document.getElementById("audioStatus").textContent = "Ses kaydı hazır";
-          stream.getTracks().forEach(track => track.stop());
-        };
-        mediaRecorder.start();
-        document.getElementById("audioStatus").textContent = "Ses kaydı alınıyor";
-      } catch (error) {
-        document.getElementById("audioStatus").textContent = "Mikrofon izni alınamadı";
-        alert("Mikrofon izni alınamadı. Ses kaydı olmadan gaze kaydı devam edebilir.");
-      }
-    }
-
-    function stopAudioRecording() {
-      if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.stop();
-    }
-
-    function startSpeechRecognition() {
-      transcriptText = "";
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-      if (!SpeechRecognition) {
-        document.getElementById("speechStatus").textContent = "Bu tarayıcı konuşmayı metne çevirmeyi desteklemiyor";
+    function fitCalibrationModel() {
+      if (calibrationSamples.length < 30) {
+        alert("Yeterli kalibrasyon verisi alınamadı. Işık ve yüz algılamayı kontrol edip tekrar deneyiniz.");
+        document.getElementById("calibrationStatus").textContent = "Başarısız";
         return;
       }
 
-      speechRecognition = new SpeechRecognition();
-      speechRecognition.lang = "tr-TR";
-      speechRecognition.continuous = true;
-      speechRecognition.interimResults = true;
-
-      speechRecognition.onstart = () => {
-        isSpeechRecognitionRunning = true;
-        document.getElementById("speechStatus").textContent = "Konuşma metne çevriliyor";
-      };
-
-      speechRecognition.onresult = (event) => {
-        let interim = "";
-        let finalText = "";
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const text = event.results[i][0].transcript;
-          if (event.results[i].isFinal) finalText += text + " ";
-          else interim += text + " ";
-        }
-
-        if (finalText.trim().length > 0) {
-          const now = new Date().toISOString();
-          transcriptText += `[${now}] ${finalText.trim()}\n`;
-        }
-
-        document.getElementById("speechStatus").textContent = interim.trim()
-          ? "Metne çevriliyor: " + interim.trim()
-          : "Konuşma metne çevriliyor";
-      };
-
-      speechRecognition.onerror = (event) => {
-        document.getElementById("speechStatus").textContent = "Konuşma tanıma hatası: " + event.error;
-      };
-
-      speechRecognition.onend = () => {
-        isSpeechRecognitionRunning = false;
-        document.getElementById("speechStatus").textContent = transcriptText.trim()
-          ? "Konuşma metni hazır"
-          : "Konuşma metni oluşmadı";
-      };
-
-      try { speechRecognition.start(); }
-      catch (error) { document.getElementById("speechStatus").textContent = "Konuşma tanıma başlatılamadı"; }
+      const X = calibrationSamples.map(s => s.features);
+      const yx = calibrationSamples.map(s => s.x);
+      const yy = calibrationSamples.map(s => s.y);
+      modelX = linearRegression(X, yx);
+      modelY = linearRegression(X, yy);
+      isCalibrated = true;
+      document.getElementById("calibrationStatus").textContent = `Tamamlandı (${calibrationSamples.length} örnek)`;
+      setStatus("Kalibrasyon tamamlandı. Küçük kırmızı gaze noktası hareket etmelidir. Şimdi kaydı başlatabilirsiniz.");
     }
 
-    function stopSpeechRecognition() {
-      if (speechRecognition && isSpeechRecognitionRunning) speechRecognition.stop();
+    function linearRegression(X, y) {
+      const n = X.length;
+      const p = X[0].length;
+      const XtX = Array.from({ length: p }, () => Array(p).fill(0));
+      const Xty = Array(p).fill(0);
+      const lambda = 0.001;
+
+      for (let i = 0; i < n; i++) {
+        for (let a = 0; a < p; a++) {
+          Xty[a] += X[i][a] * y[i];
+          for (let b = 0; b < p; b++) XtX[a][b] += X[i][a] * X[i][b];
+        }
+      }
+      for (let i = 0; i < p; i++) XtX[i][i] += lambda;
+      return solveLinearSystem(XtX, Xty);
+    }
+
+    function solveLinearSystem(A, b) {
+      const n = b.length;
+      const M = A.map((row, i) => [...row, b[i]]);
+
+      for (let i = 0; i < n; i++) {
+        let maxRow = i;
+        for (let k = i + 1; k < n; k++) if (Math.abs(M[k][i]) > Math.abs(M[maxRow][i])) maxRow = k;
+        [M[i], M[maxRow]] = [M[maxRow], M[i]];
+
+        const pivot = M[i][i] || 1e-9;
+        for (let j = i; j <= n; j++) M[i][j] /= pivot;
+
+        for (let k = 0; k < n; k++) {
+          if (k === i) continue;
+          const factor = M[k][i];
+          for (let j = i; j <= n; j++) M[k][j] -= factor * M[i][j];
+        }
+      }
+      return M.map(row => row[n]);
+    }
+
+    function predict(weights, features) {
+      return weights.reduce((sum, w, i) => sum + w * features[i], 0);
+    }
+
+    function updateGazePoint(x, y) {
+      lastGaze = { x, y, elapsedTime: performance.now() };
+      const dot = document.getElementById("gazeDot");
+      dot.style.display = "block";
+      dot.style.left = x + "px";
+      dot.style.top = y + "px";
+
+      if (isRecording) recordGazeSample(lastGaze);
     }
 
     async function startRecording() {
       const participantId = document.getElementById("participantId").value.trim();
       if (!participantId) { alert("Lütfen önce katılımcı kodunu giriniz."); return; }
       if (!isCalibrated) { alert("Lütfen önce otomatik kalibrasyonu tamamlayınız."); return; }
+
       isRecording = true;
       startTime = new Date();
       endTime = null;
@@ -428,47 +498,34 @@
       setStatus("Gaze ve ses kaydı başladı. Öğrenciden problem çözümünü sesli yapmasını isteyiniz.");
       await startAudioRecording();
       startSpeechRecognition();
-      recordingInterval = setInterval(() => recordGazeSample(), sampleIntervalMs);
     }
 
-    function recordGazeSample(gazeOverride = null) {
-      if (!isRecording) return;
-
+    function recordGazeSample(gaze) {
+      if (!isRecording || !gaze) return;
       const nowMs = performance.now();
-      if (nowMs - lastRecordedAt < sampleIntervalMs * 0.8) return;
-
-      const gaze = gazeOverride || latestGaze;
-
-      if (!gaze || typeof gaze.x !== "number" || typeof gaze.y !== "number") {
-        setStatus("Kayıt açık; fakat gaze koordinatı gelmiyor. Lütfen küçük gaze noktasının hareket ettiğini kontrol edin.");
-        return;
-      }
-
+      if (nowMs - lastRecordedAt < sampleIntervalMs) return;
       lastRecordedAt = nowMs;
+
       const participantId = document.getElementById("participantId").value.trim();
       const task = tasks[currentTaskIndex];
-      const taskName = task.title;
-      const atomType = task.atom;
       const aoi = detectAOI(gaze.x, gaze.y);
       const grid = detectGrid7x7(gaze.x, gaze.y);
       const now = new Date();
       const elapsedFromStartMs = startTime ? now - startTime : 0;
 
       if (previousAOI && previousAOI !== aoi) {
-        transitions.push({ participantId, taskName, atomType, timestamp: now.toISOString(), fromAOI: previousAOI, toAOI: aoi, fromGrid: previousGrid, toGrid: grid });
+        transitions.push({ participantId, taskName: task.title, atomType: task.atom, timestamp: now.toISOString(), fromAOI: previousAOI, toAOI: aoi, fromGrid: previousGrid, toGrid: grid });
       }
-
       previousAOI = aoi;
       previousGrid = grid;
 
       gazeData.push({
         participantId,
         taskNo: currentTaskIndex + 1,
-        taskName,
-        atomType,
+        taskName: task.title,
+        atomType: task.atom,
         timestamp: now.toISOString(),
         elapsedFromStartMs,
-        webgazerElapsedTime: Math.round(gaze.elapsedTime || performance.now()),
         x: Math.round(gaze.x),
         y: Math.round(gaze.y),
         aoi,
@@ -486,8 +543,6 @@
     function stopRecording() {
       isRecording = false;
       endTime = new Date();
-      if (recordingInterval) clearInterval(recordingInterval);
-      recordingInterval = null;
       stopAudioRecording();
       stopSpeechRecognition();
       detectFixations(true);
@@ -495,13 +550,69 @@
       setStatus("Kayıt durduruldu. CSV, ses ve konuşma metni dosyalarını indirebilirsiniz.");
     }
 
-    document.addEventListener("click", function(e) {
-      if (isRecording && !e.target.classList.contains("calibration-point")) stepCount++;
-    });
+    async function startAudioRecording() {
+      audioChunks = [];
+      audioBlob = null;
+      audioUrl = null;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = event => { if (event.data.size > 0) audioChunks.push(event.data); };
+        mediaRecorder.onstop = () => {
+          audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+          audioUrl = URL.createObjectURL(audioBlob);
+          document.getElementById("audioStatus").textContent = "Ses kaydı hazır";
+          stream.getTracks().forEach(track => track.stop());
+        };
+        mediaRecorder.start();
+        document.getElementById("audioStatus").textContent = "Ses kaydı alınıyor";
+      } catch (error) {
+        document.getElementById("audioStatus").textContent = "Mikrofon izni alınamadı";
+        alert("Mikrofon izni alınamadı. Ses kaydı olmadan gaze kaydı devam edebilir.");
+      }
+    }
 
-    document.addEventListener("keydown", function() {
-      if (isRecording) stepCount++;
-    });
+    function stopAudioRecording() { if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.stop(); }
+
+    function startSpeechRecognition() {
+      transcriptText = "";
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        document.getElementById("speechStatus").textContent = "Bu tarayıcı konuşmayı metne çevirmeyi desteklemiyor";
+        return;
+      }
+      speechRecognition = new SpeechRecognition();
+      speechRecognition.lang = "tr-TR";
+      speechRecognition.continuous = true;
+      speechRecognition.interimResults = true;
+      speechRecognition.onstart = () => {
+        isSpeechRecognitionRunning = true;
+        document.getElementById("speechStatus").textContent = "Konuşma metne çevriliyor";
+      };
+      speechRecognition.onresult = (event) => {
+        let interim = "";
+        let finalText = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const text = event.results[i][0].transcript;
+          if (event.results[i].isFinal) finalText += text + " ";
+          else interim += text + " ";
+        }
+        if (finalText.trim().length > 0) transcriptText += `[${new Date().toISOString()}] ${finalText.trim()}\n`;
+        document.getElementById("speechStatus").textContent = interim.trim() ? "Metne çevriliyor: " + interim.trim() : "Konuşma metne çevriliyor";
+      };
+      speechRecognition.onerror = (event) => { document.getElementById("speechStatus").textContent = "Konuşma tanıma hatası: " + event.error; };
+      speechRecognition.onend = () => {
+        isSpeechRecognitionRunning = false;
+        document.getElementById("speechStatus").textContent = transcriptText.trim() ? "Konuşma metni hazır" : "Konuşma metni oluşmadı";
+      };
+      try { speechRecognition.start(); }
+      catch (error) { document.getElementById("speechStatus").textContent = "Konuşma tanıma başlatılamadı"; }
+    }
+
+    function stopSpeechRecognition() { if (speechRecognition && isSpeechRecognitionRunning) speechRecognition.stop(); }
+
+    document.addEventListener("click", e => { if (isRecording && !e.target.classList.contains("calibration-point")) stepCount++; });
+    document.addEventListener("keydown", () => { if (isRecording) stepCount++; });
 
     function detectAOI(x, y) {
       const areas = document.querySelectorAll(".aoi");
@@ -518,7 +629,7 @@
       return `R${row}C${col}`;
     }
 
-    function detectFixations(force = false) {
+    function detectFixations() {
       if (gazeData.length < 3) return;
       let cluster = [];
       for (let i = gazeData.length - 1; i >= 0; i--) {
@@ -526,16 +637,16 @@
         if (cluster.length === 0) { cluster.push(p); continue; }
         const cx = cluster.reduce((s, d) => s + d.x, 0) / cluster.length;
         const cy = cluster.reduce((s, d) => s + d.y, 0) / cluster.length;
-        const dist = Math.sqrt(Math.pow(p.x - cx, 2) + Math.pow(p.y - cy, 2));
-        if (dist <= fixationRadiusPx) cluster.push(p); else break;
+        const d = Math.hypot(p.x - cx, p.y - cy);
+        if (d <= fixationRadiusPx) cluster.push(p); else break;
       }
       const duration = cluster.length * sampleIntervalMs;
       if (duration >= fixationDurationThresholdMs) {
         const last = cluster[0];
-        const fixationKey = `${last.participantId}_${last.taskNo}_${last.aoi}_${Math.round(last.elapsedFromStartMs / fixationDurationThresholdMs)}`;
-        if (!fixationData.some(f => f.fixationKey === fixationKey)) {
+        const key = `${last.participantId}_${last.taskNo}_${last.aoi}_${Math.round(last.elapsedFromStartMs / fixationDurationThresholdMs)}`;
+        if (!fixationData.some(f => f.fixationKey === key)) {
           fixationData.push({
-            fixationKey,
+            fixationKey: key,
             participantId: last.participantId,
             taskNo: last.taskNo,
             taskName: last.taskName,
@@ -562,10 +673,10 @@
     function drawHeatPoint(x, y) {
       const canvas = document.getElementById("heatmapCanvas");
       const ctx = canvas.getContext("2d");
-      const radius = 38;
+      const radius = 40;
       const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
-      gradient.addColorStop(0, "rgba(255,0,0,0.22)");
-      gradient.addColorStop(0.45, "rgba(255,165,0,0.12)");
+      gradient.addColorStop(0, "rgba(255,0,0,0.24)");
+      gradient.addColorStop(0.45, "rgba(255,165,0,0.13)");
       gradient.addColorStop(1, "rgba(255,255,0,0)");
       ctx.fillStyle = gradient;
       ctx.beginPath();
@@ -589,20 +700,12 @@
       document.getElementById("completionTime").textContent = getCompletionSeconds();
       document.getElementById("stepCount").textContent = stepCount;
       document.getElementById("fixationCount").textContent = fixationData.length;
-
-      const counts = {};
-      const dwell = {};
-      const fixCounts = {};
-
+      const counts = {}, dwell = {}, fixCounts = {};
       gazeData.forEach(row => {
         counts[row.aoi] = (counts[row.aoi] || 0) + 1;
         dwell[row.aoi] = (dwell[row.aoi] || 0) + sampleIntervalMs;
       });
-
-      fixationData.forEach(row => {
-        fixCounts[row.aoi] = (fixCounts[row.aoi] || 0) + 1;
-      });
-
+      fixationData.forEach(row => { fixCounts[row.aoi] = (fixCounts[row.aoi] || 0) + 1; });
       const tbody = document.getElementById("aoiSummary");
       tbody.innerHTML = "";
       Object.keys(counts).forEach(aoi => {
@@ -616,8 +719,7 @@
       if (rows.length === 0) { alert("Henüz kayıtlı veri yok."); return; }
       const csvRows = [headers.join(",")];
       rows.forEach(row => {
-        const values = headers.map(header => '"' + String(row[header] ?? "").replace(/"/g, '""') + '"');
-        csvRows.push(values.join(","));
+        csvRows.push(headers.map(h => '"' + String(row[h] ?? "").replace(/"/g, '""') + '"').join(","));
       });
       const blob = new Blob([csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
@@ -629,7 +731,7 @@
     }
 
     function downloadRawCSV() {
-      const headers = ["participantId","taskNo","taskName","atomType","timestamp","elapsedFromStartMs","webgazerElapsedTime","x","y","aoi","grid7x7","stepCount","answerText","observerNote"];
+      const headers = ["participantId","taskNo","taskName","atomType","timestamp","elapsedFromStartMs","x","y","aoi","grid7x7","stepCount","answerText","observerNote"];
       csvDownload(gazeData, headers, "raw_gaze_python_tasks.csv");
     }
 
@@ -648,8 +750,7 @@
         if (!grouped[key]) grouped[key] = [];
         grouped[key].push(d);
       });
-
-      const summaryRows = Object.keys(grouped).map(key => {
+      const rows = Object.keys(grouped).map(key => {
         const aoiRows = grouped[key];
         const first = aoiRows[0];
         const aoiFix = fixationData.filter(f => f.taskNo === first.taskNo && f.aoi === first.aoi);
@@ -670,9 +771,8 @@
           aoiMeanFixationDurationMs: aoiFix.length ? Math.round(aoiFix.reduce((s, f) => s + f.durationMs, 0) / aoiFix.length) : 0
         };
       });
-
       const headers = ["participantId","taskNo","taskName","atomType","completionTimeSec","stepCount","totalGazeSamples","totalFixationCount","totalTransitionCount","aoi","aoiGazeCount","aoiDwellTimeMs","aoiFixationCount","aoiMeanFixationDurationMs"];
-      csvDownload(summaryRows, headers, "summary_efficiency_aoi_python_tasks.csv");
+      csvDownload(rows, headers, "summary_efficiency_aoi_python_tasks.csv");
     }
 
     function downloadAudio() {
@@ -688,16 +788,7 @@
       if (!transcriptText.trim()) { alert("Henüz indirilebilir konuşma metni yok."); return; }
       const participantId = document.getElementById("participantId").value.trim() || "participant";
       const task = tasks[currentTaskIndex];
-      const content = [
-        `Katılımcı: ${participantId}`,
-        `Görev: ${task.title}`,
-        `Kod örüntüsü: ${task.atom}`,
-        `Tarih: ${new Date().toISOString()}`,
-        "",
-        "SES METNİ:",
-        transcriptText.trim()
-      ].join("\n");
-
+      const content = [`Katılımcı: ${participantId}`, `Görev: ${task.title}`, `Kod örüntüsü: ${task.atom}`, `Tarih: ${new Date().toISOString()}`, "", "SES METNİ:", transcriptText.trim()].join("\n");
       const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -717,39 +808,28 @@
       endTime = null;
       previousAOI = null;
       previousGrid = null;
-      latestGaze = null;
       lastRecordedAt = 0;
       audioChunks = [];
       audioBlob = null;
       audioUrl = null;
       transcriptText = "";
-      if (recordingInterval) clearInterval(recordingInterval);
-      recordingInterval = null;
       if (speechRecognition && isSpeechRecognitionRunning) speechRecognition.stop();
       document.getElementById("audioStatus").textContent = "Hazır değil";
       document.getElementById("speechStatus").textContent = "Hazır değil";
       const canvas = document.getElementById("heatmapCanvas");
-      const ctx = canvas.getContext("2d");
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
       updateSummary();
       setStatus("Veriler temizlendi.");
     }
 
     window.addEventListener("resize", setupHeatmapCanvas);
-    window.addEventListener("DOMContentLoaded", function () {
-      try {
-        initTasks();
-      } catch (error) {
+    window.addEventListener("DOMContentLoaded", () => {
+      try { initTasks(); }
+      catch (error) {
         console.error("Görevler yüklenemedi:", error);
-        alert("Görevler yüklenemedi. Lütfen F12 > Console bölümündeki kırmızı hatayı kontrol edin.");
+        alert("Görevler yüklenemedi. F12 > Console bölümündeki kırmızı hatayı kontrol edin.");
       }
     });
-
-    window.onbeforeunload = function() {
-      try {
-        webgazer.end();
-      } catch (e) {}
-    };
   </script>
 </body>
 </html>
