@@ -372,7 +372,8 @@
 
         if (finalText.trim().length > 0) {
           const now = new Date().toISOString();
-          transcriptText += `[${now}] ${finalText.trim()}\n`;
+          transcriptText += `[${now}] ${finalText.trim()}
+`;
         }
 
         document.getElementById("speechStatus").textContent = interim.trim()
@@ -443,16 +444,34 @@
       setStatus("Gaze ve ses kaydı başladı. Öğrenciden problem çözümünü sesli yapmasını isteyiniz.");
       await startAudioRecording();
       startSpeechRecognition();
-      // Veri kaydı artık WebGazer gaze listener içinde doğrudan yapılır.
-      // Bu nedenle ayrıca setInterval başlatmıyoruz.
-      recordingInterval = null;
+
+      // WebGazer listener veriyi doğrudan kaydedebilir; buna ek olarak
+      // getCurrentPrediction ile düzenli yedek veri çekiyoruz.
+      recordingInterval = setInterval(recordGazeSample, sampleIntervalMs);
     }
 
-    function recordGazeSample() {
+    async function recordGazeSample() {
       if (!isRecording) return;
 
-      if (!latestGaze) {
-        setStatus("Kayıt açık; fakat gaze verisi yok. Yüz kutusu ve kırmızı gaze noktasını kontrol edin. Gaze noktası yoksa CSV/ısı haritası oluşmaz.");
+      let gaze = latestGaze;
+
+      // Eğer listener henüz veri üretmediyse, WebGazer'dan doğrudan prediction iste.
+      if (!gaze && typeof webgazer !== "undefined" && typeof webgazer.getCurrentPrediction === "function") {
+        try {
+          const prediction = await webgazer.getCurrentPrediction();
+          if (prediction && typeof prediction.x === "number" && typeof prediction.y === "number") {
+            gaze = {
+              x: prediction.x,
+              y: prediction.y,
+              elapsedTime: performance.now()
+            };
+            latestGaze = gaze;
+          }
+        } catch (e) {}
+      }
+
+      if (!gaze) {
+        setStatus("Kayıt açık; fakat gaze koordinatı gelmiyor. Kırmızı kalibrasyon noktası değil, kayıt sırasında hareket eden küçük gaze noktası görünmeli.");
         return;
       }
 
@@ -460,8 +479,8 @@
       const task = tasks[currentTaskIndex];
       const taskName = task.title;
       const atomType = task.atom;
-      const aoi = detectAOI(latestGaze.x, latestGaze.y);
-      const grid = detectGrid7x7(latestGaze.x, latestGaze.y);
+      const aoi = detectAOI(gaze.x, gaze.y);
+      const grid = detectGrid7x7(gaze.x, gaze.y);
       const now = new Date();
       const elapsedFromStartMs = startTime ? now - startTime : 0;
 
@@ -479,9 +498,9 @@
         atomType,
         timestamp: now.toISOString(),
         elapsedFromStartMs,
-        webgazerElapsedTime: Math.round(latestGaze.elapsedTime),
-        x: Math.round(latestGaze.x),
-        y: Math.round(latestGaze.y),
+        webgazerElapsedTime: Math.round(gaze.elapsedTime),
+        x: Math.round(gaze.x),
+        y: Math.round(gaze.y),
         aoi,
         grid7x7: grid,
         stepCount,
@@ -489,7 +508,7 @@
         observerNote: document.getElementById("observerNote").value.replace(/\n/g, " ")
       });
 
-      drawHeatPoint(latestGaze.x, latestGaze.y);
+      drawHeatPoint(gaze.x, gaze.y);
       detectFixations();
       updateSummary();
     }
@@ -712,7 +731,8 @@
         "",
         "SES METNİ:",
         transcriptText.trim()
-      ].join("\n");
+      ].join("
+");
 
       const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
