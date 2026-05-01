@@ -367,6 +367,8 @@
         })
         .begin();
       webgazer.showVideoPreview(true).showPredictionPoints(false);
+      webgazer.showFaceOverlay(true);
+webgazer.showFaceFeedbackBox(true);
       setStatus("Kamera aktif. Şimdi kalibrasyon yapabilirsiniz.");
     }
 
@@ -395,6 +397,12 @@
       let clicks = 0;
       point.onclick = function() {
         clicks++;
+
+          webgazer.recordScreenPosition(
+    point.getBoundingClientRect().left + point.offsetWidth / 2,
+    point.getBoundingClientRect().top + point.offsetHeight / 2,
+    'click'
+  );
         if (clicks >= 3) { calibrationIndex++; showCalibrationPoint(); }
       };
       screen.appendChild(point);
