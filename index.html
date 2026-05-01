@@ -154,7 +154,7 @@
     let transitions = [];
     let latestGaze = null;
     let recordingInterval = null;
-    let predictionLoop = null;
+    let isCalibrated = false;
     let calibrationIndex = 0;
     let startTime = null;
     let endTime = null;
@@ -175,7 +175,7 @@
     const sampleIntervalMs = 100;
     const fixationDurationThresholdMs = 200;
     const fixationRadiusPx = 90;
-    const calibrationSamplesPerPoint = 14;
+    const calibrationSamplesPerPoint = 30;
     const calibrationSampleIntervalMs = 140;
 
     const calibrationPoints = [
@@ -241,10 +241,11 @@
     async function startWebGazer() {
       setStatus("Kamera başlatılıyor. Tarayıcı kamera izni isteyebilir.");
       latestGaze = null;
+      isCalibrated = false;
 
       try {
         await webgazer
-          .setRegression("ridge")
+          .setRegression("weightedRidge")
           .setGazeListener(function(data, elapsedTime) {
             if (!data || typeof data.x !== "number" || typeof data.y !== "number") return;
             updateGazePoint(data.x, data.y, elapsedTime);
@@ -256,26 +257,7 @@
         webgazer.showFaceOverlay(true);
         webgazer.showFaceFeedbackBox(true);
 
-        if (typeof webgazer.resume === "function") webgazer.resume();
-
-        if (predictionLoop) clearInterval(predictionLoop);
-        predictionLoop = setInterval(async () => {
-          try {
-            if (typeof webgazer.getCurrentPrediction !== "function") return;
-            const prediction = await webgazer.getCurrentPrediction();
-            if (prediction && typeof prediction.x === "number" && typeof prediction.y === "number") {
-              updateGazePoint(prediction.x, prediction.y, performance.now());
-            }
-          } catch (e) {}
-        }, 100);
-
-        setStatus("Kamera aktif. Yüz kutusu göründükten sonra otomatik kalibrasyon yapın. Kalibrasyondan sonra küçük kırmızı gaze noktası hareket etmelidir.");
-
-        setTimeout(() => {
-          if (!latestGaze) {
-            setStatus("Kamera/yüz kutusu var; ancak gaze prediction henüz yok. Kalibrasyonu tamamlayın, ışığı artırın ve yüzünüzü kamera merkezinde tutun.");
-          }
-        }, 5000);
+        setStatus("Kamera aktif. Önce otomatik kalibrasyonu tamamlayın; sonra kaydı başlatın.");
       } catch (error) {
         console.error(error);
         setStatus("WebGazer başlatılamadı. Kamera iznini, HTTPS bağlantısını ve tarayıcı konsolunu kontrol edin.");
@@ -283,7 +265,7 @@
       }
     }
 
-    function updateGazePoint(x, y, elapsedTime) {
+    function updateGazePointazePoint(x, y, elapsedTime) {
       latestGaze = { x, y, elapsedTime };
       const dot = document.getElementById("gazeDot");
       dot.style.display = "block";
@@ -311,7 +293,9 @@
 
       if (calibrationIndex >= calibrationPoints.length) {
         screen.style.display = "none";
-        setStatus("Otomatik kalibrasyon tamamlandı. Kaydı başlatabilirsiniz.");
+        isCalibrated = true;
+        latestGaze = null;
+        setStatus("Otomatik kalibrasyon tamamlandı. Şimdi 3-5 saniye ekrana bakın; küçük gaze noktası görünürse kaydı başlatın.");
         return;
       }
 
@@ -434,6 +418,7 @@
     async function startRecording() {
       const participantId = document.getElementById("participantId").value.trim();
       if (!participantId) { alert("Lütfen önce katılımcı kodunu giriniz."); return; }
+      if (!isCalibrated) { alert("Lütfen önce otomatik kalibrasyonu tamamlayınız."); return; }
       isRecording = true;
       startTime = new Date();
       endTime = null;
@@ -446,26 +431,16 @@
       recordingInterval = setInterval(() => recordGazeSample(), sampleIntervalMs);
     }
 
-    async function recordGazeSample(gazeOverride = null) {
+    function recordGazeSample(gazeOverride = null) {
       if (!isRecording) return;
 
       const nowMs = performance.now();
       if (nowMs - lastRecordedAt < sampleIntervalMs * 0.8) return;
 
-      let gaze = gazeOverride || latestGaze;
+      const gaze = gazeOverride || latestGaze;
 
-      if (!gaze && typeof webgazer !== "undefined" && typeof webgazer.getCurrentPrediction === "function") {
-        try {
-          const prediction = await webgazer.getCurrentPrediction();
-          if (prediction && typeof prediction.x === "number" && typeof prediction.y === "number") {
-            gaze = { x: prediction.x, y: prediction.y, elapsedTime: performance.now() };
-            latestGaze = gaze;
-          }
-        } catch (e) {}
-      }
-
-      if (!gaze) {
-        setStatus("Kayıt açık; fakat gaze koordinatı gelmiyor. Kırmızı kalibrasyon noktası değil, kayıt sırasında hareket eden küçük gaze noktası görünmeli.");
+      if (!gaze || typeof gaze.x !== "number" || typeof gaze.y !== "number") {
+        setStatus("Kayıt açık; fakat gaze koordinatı gelmiyor. Lütfen küçük gaze noktasının hareket ettiğini kontrol edin.");
         return;
       }
 
@@ -772,7 +747,6 @@
 
     window.onbeforeunload = function() {
       try {
-        if (predictionLoop) clearInterval(predictionLoop);
         webgazer.end();
       } catch (e) {}
     };
