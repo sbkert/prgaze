@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Python Kod Anlama ve Webcam Gaze Tracking Araştırması</title>
+  <title>Python Kod Anlama, Sesli Düşünme ve Webcam Gaze Tracking Araştırması</title>
   <script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
   <style>
     body { margin: 0; font-family: Arial, sans-serif; background: #f5f5f5; color: #222; }
@@ -17,8 +17,9 @@
     button.success { background: #16803c; }
     input, select, textarea { padding: 9px; margin: 6px; border: 1px solid #aaa; border-radius: 6px; font-size: 15px; }
     #calibrationScreen { position: fixed; inset: 0; background: white; display: none; z-index: 9998; }
-    .calibration-point { width: 24px; height: 24px; background: #d00000; border-radius: 50%; position: absolute; transform: translate(-50%, -50%); cursor: pointer; box-shadow: 0 0 0 8px rgba(208,0,0,0.15); }
-    #calibrationInstruction { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #222; color: white; padding: 12px 18px; border-radius: 8px; z-index: 9999; }
+    .calibration-point { width: 28px; height: 28px; background: #d00000; border-radius: 50%; position: absolute; transform: translate(-50%, -50%); box-shadow: 0 0 0 10px rgba(208,0,0,0.15); }
+    #calibrationInstruction { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #222; color: white; padding: 12px 18px; border-radius: 8px; z-index: 9999; max-width: 720px; text-align: center; }
+    #calibrationCounter { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: #2d6cdf; color: white; padding: 10px 16px; border-radius: 8px; z-index: 9999; }
     #experimentArea { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 16px; min-height: 460px; }
     .aoi { border: 3px solid #444; border-radius: 10px; padding: 18px; background: #fff; position: relative; }
     .aoi-title { font-weight: bold; margin-bottom: 12px; color: #2d6cdf; }
@@ -27,6 +28,7 @@
     .line-no { color: #777; text-align: right; user-select: none; border-right: 1px solid #ccc; padding-right: 8px; }
     .line-code { white-space: pre; }
     #gazeDot { position: fixed; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.75); border-radius: 50%; pointer-events: none; z-index: 9997; display: none; transform: translate(-50%, -50%); }
+    #heatmapCanvas { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 9996; display: none; }
     #status { font-weight: bold; color: #2d6cdf; }
     table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
     th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
@@ -34,10 +36,11 @@
     .small { font-size: 13px; color: #555; }
     .task-nav { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .task-pill { background: #eee; color: #222; border-radius: 20px; padding: 6px 10px; font-size: 13px; }
+    .warning { color: #b3261e; font-weight: bold; }
   </style>
 </head>
 <body>
-  <header>Python Kod Anlama ve Webcam Gaze Tracking Araştırması</header>
+  <header>Python Kod Anlama, Sesli Düşünme ve Webcam Gaze Tracking Araştırması</header>
 
   <main>
     <section class="panel">
@@ -46,28 +49,23 @@
       <input type="text" id="participantId" placeholder="Örn: P01" />
       <label>Görev:</label>
       <select id="taskSelector" onchange="loadSelectedTask()"></select>
-      <label>Görev Durumu:</label>
-      <select id="taskCompletion">
-        <option value="Completed without assistance">Completed without assistance</option>
-        <option value="Completed with assistance">Completed with assistance</option>
-        <option value="Not completed">Not completed</option>
-      </select>
       <p id="status">Durum: Hazır</p>
 
-      <button onclick="startWebGazer()">1. Kamerayı Başlat</button>
-      <button onclick="startCalibration()">2. Kalibrasyon Yap</button>
-      <button onclick="startRecording()">3. Kaydı Başlat</button>
+      <button onclick="startWebGazer()">1. Kamera ve Göz Takibini Başlat</button>
+      <button onclick="startCalibration()">2. Otomatik Kalibrasyon</button>
+      <button onclick="startRecording()">3. Gaze + Ses Kaydını Başlat</button>
       <button class="secondary" onclick="stopRecording()">Kaydı Durdur</button>
-      <button class="success" onclick="markHelp()">Yardım Verildi</button>
-      <button class="success" onclick="markStep()">Manuel Adım Ekle</button>
       <button onclick="previousTask()">Önceki Görev</button>
       <button onclick="nextTask()">Sonraki Görev</button>
+      <button class="success" onclick="toggleHeatmap()">Isı Haritasını Göster/Gizle</button>
       <button onclick="downloadRawCSV()">Ham Gaze CSV</button>
       <button onclick="downloadSummaryCSV()">Özet Analiz CSV</button>
       <button onclick="downloadTransitionsCSV()">Scan Path CSV</button>
+      <button onclick="downloadAudio()">Ses Kaydını İndir</button>
       <button class="danger" onclick="resetData()">Veriyi Temizle</button>
 
-      <p class="small">Not: Mouse tıklamaları ve klavye girişleri otomatik olarak “step” sayısına eklenir. Problem çözümünü sesli düşünme protokolüyle yaptırınız.</p>
+      <p class="small">Not: Otomatik kalibrasyonda öğrenci kırmızı noktaya bakar; sistem tıklama istemeden kalibrasyon örneklerini alır. Ses kaydı için tarayıcı mikrofon izni isteyecektir.</p>
+      <p class="small warning">Veriler merkezi sunucuya gönderilmez. CSV ve ses dosyası bu bilgisayardan indirilir.</p>
     </section>
 
     <section class="panel">
@@ -95,8 +93,8 @@
             <div class="aoi-title">AOI 3: Cevap Alanı</div>
             <label>Tahmin edilen çıktı:</label>
             <textarea id="answer" style="width:100%; height:120px;" placeholder="Öğrenci çıktıyı buraya yazar..."></textarea>
-            <label>Sesli düşünme / gözlem notu:</label>
-            <textarea id="thinkAloudNote" style="width:100%; height:120px;" placeholder="Araştırmacı gözlem notu veya kısa protokol notu..."></textarea>
+            <label>Araştırmacı gözlem notu:</label>
+            <textarea id="observerNote" style="width:100%; height:120px;" placeholder="Kısa gözlem notu..."></textarea>
           </div>
         </div>
       </div>
@@ -107,8 +105,8 @@
       <p>Toplam gaze kayıt sayısı: <span id="recordCount">0</span></p>
       <p>Task completion time: <span id="completionTime">0</span> sn</p>
       <p>Step count: <span id="stepCount">0</span></p>
-      <p>Help count: <span id="helpCount">0</span></p>
       <p>Total fixation/focus count: <span id="fixationCount">0</span></p>
+      <p>Ses kaydı durumu: <span id="audioStatus">Hazır değil</span></p>
       <table>
         <thead>
           <tr>
@@ -123,149 +121,28 @@
     </section>
   </main>
 
+  <canvas id="heatmapCanvas"></canvas>
   <div id="gazeDot"></div>
 
   <div id="calibrationScreen">
-    <div id="calibrationInstruction">Kırmızı noktaya bakıp tıklayınız. Her noktaya 3 kez tıklamanız önerilir.</div>
+    <div id="calibrationInstruction">Kırmızı nokta göründüğünde başınızı oynatmadan yalnızca gözünüzle noktaya bakınız. Nokta kendiliğinden bir sonraki konuma geçecektir.</div>
+    <div id="calibrationCounter">Kalibrasyon başlıyor...</div>
   </div>
 
   <script>
     const tasks = [
-      {
-        title: "Görev 1 - Atama ve Güncelleme",
-        atom: "Assignment / Variable Update",
-        prompt: "Aşağıdaki Python kodunun çıktısı ne olur? Satır numaralarını kullanarak sesli açıklayınız.",
-        code: [
-          "x = 4",
-          "y = x",
-          "x = x + 3",
-          "print(x, y)"
-        ]
-      },
-      {
-        title: "Görev 2 - Koşullu İfade",
-        atom: "Conditional Expression",
-        prompt: "Koşullu ifadeyi takip ederek çıktıyı tahmin ediniz.",
-        code: [
-          "score = 65",
-          "result = 'pass' if score >= 60 else 'fail'",
-          "print(result)"
-        ]
-      },
-      {
-        title: "Görev 3 - Mantıksal Kısa Devre",
-        atom: "Logic as Control Flow / Short-Circuit",
-        prompt: "and ifadesinin ikinci kısmının çalışıp çalışmayacağını düşünerek çıktıyı tahmin ediniz.",
-        code: [
-          "x = 0",
-          "y = 5",
-          "result = x != 0 and y / x > 1",
-          "print(result)"
-        ]
-      },
-      {
-        title: "Görev 4 - Zincirli Karşılaştırma",
-        atom: "Implicit Predicate / Chained Comparison",
-        prompt: "Python’daki zincirli karşılaştırma yapısını dikkate alarak çıktıyı tahmin ediniz.",
-        code: [
-          "a = 3",
-          "b = 5",
-          "c = 4",
-          "print(a < b > c)"
-        ]
-      },
-      {
-        title: "Görev 5 - Liste İndeksi",
-        atom: "Indexing / Off-by-One Risk",
-        prompt: "Liste indekslerini takip ederek çıktıyı tahmin ediniz.",
-        code: [
-          "numbers = [10, 20, 30, 40]",
-          "i = 2",
-          "print(numbers[i])"
-        ]
-      },
-      {
-        title: "Görev 6 - Negatif İndeks",
-        atom: "Negative Indexing",
-        prompt: "Negatif indeksin hangi elemana karşılık geldiğini açıklayarak çıktıyı tahmin ediniz.",
-        code: [
-          "letters = ['a', 'b', 'c', 'd']",
-          "print(letters[-1])",
-          "print(letters[-3])"
-        ]
-      },
-      {
-        title: "Görev 7 - Dilimleme",
-        atom: "Slicing",
-        prompt: "Dilimlemenin başlangıç ve bitiş indekslerini takip ederek çıktıyı tahmin ediniz.",
-        code: [
-          "text = 'PYTHON'",
-          "part = text[1:4]",
-          "print(part)"
-        ]
-      },
-      {
-        title: "Görev 8 - Döngüde Biriktirme",
-        atom: "Loop Accumulation",
-        prompt: "Her döngü adımında total değişkeninin nasıl değiştiğini sesli açıklayınız.",
-        code: [
-          "total = 0",
-          "for i in range(1, 4):",
-          "    total = total + i",
-          "print(total)"
-        ]
-      },
-      {
-        title: "Görev 9 - İç İçe Koşul",
-        atom: "Nested Condition",
-        prompt: "Girintileri ve koşul akışını takip ederek çıktıyı tahmin ediniz.",
-        code: [
-          "x = 7",
-          "if x > 5:",
-          "    if x % 2 == 0:",
-          "        print('A')",
-          "    else:",
-          "        print('B')",
-          "else:",
-          "    print('C')"
-        ]
-      },
-      {
-        title: "Görev 10 - Fonksiyon ve Dönüş Değeri",
-        atom: "Function Return",
-        prompt: "Fonksiyonun hangi değeri döndürdüğünü takip ederek çıktıyı tahmin ediniz.",
-        code: [
-          "def add_one(n):",
-          "    n = n + 1",
-          "    return n",
-          "x = 4",
-          "y = add_one(x)",
-          "print(x, y)"
-        ]
-      },
-      {
-        title: "Görev 11 - Liste Referansı",
-        atom: "Aliasing / Reference",
-        prompt: "a ve b listelerinin aynı nesneyi gösterip göstermediğini düşünerek çıktıyı tahmin ediniz.",
-        code: [
-          "a = [1, 2]",
-          "b = a",
-          "b.append(3)",
-          "print(a)"
-        ]
-      },
-      {
-        title: "Görev 12 - Varsayılan Parametre",
-        atom: "Default Mutable Argument",
-        prompt: "Fonksiyon iki kez çağrıldığında liste içeriğinin nasıl değiştiğini sesli açıklayınız.",
-        code: [
-          "def add_item(x, items=[]):",
-          "    items.append(x)",
-          "    return items",
-          "print(add_item(1))",
-          "print(add_item(2))"
-        ]
-      }
+      { title: "Görev 1 - Atama ve Güncelleme", atom: "Assignment / Variable Update", prompt: "Aşağıdaki Python kodunun çıktısı ne olur? Satır numaralarını kullanarak sesli açıklayınız.", code: ["x = 4", "y = x", "x = x + 3", "print(x, y)"] },
+      { title: "Görev 2 - Koşullu İfade", atom: "Conditional Expression", prompt: "Koşullu ifadeyi takip ederek çıktıyı tahmin ediniz.", code: ["score = 65", "result = 'pass' if score >= 60 else 'fail'", "print(result)"] },
+      { title: "Görev 3 - Mantıksal Kısa Devre", atom: "Logic as Control Flow / Short-Circuit", prompt: "and ifadesinin ikinci kısmının çalışıp çalışmayacağını düşünerek çıktıyı tahmin ediniz.", code: ["x = 0", "y = 5", "result = x != 0 and y / x > 1", "print(result)"] },
+      { title: "Görev 4 - Zincirli Karşılaştırma", atom: "Implicit Predicate / Chained Comparison", prompt: "Python’daki zincirli karşılaştırma yapısını dikkate alarak çıktıyı tahmin ediniz.", code: ["a = 3", "b = 5", "c = 4", "print(a < b > c)"] },
+      { title: "Görev 5 - Liste İndeksi", atom: "Indexing / Off-by-One Risk", prompt: "Liste indekslerini takip ederek çıktıyı tahmin ediniz.", code: ["numbers = [10, 20, 30, 40]", "i = 2", "print(numbers[i])"] },
+      { title: "Görev 6 - Negatif İndeks", atom: "Negative Indexing", prompt: "Negatif indeksin hangi elemana karşılık geldiğini açıklayarak çıktıyı tahmin ediniz.", code: ["letters = ['a', 'b', 'c', 'd']", "print(letters[-1])", "print(letters[-3])"] },
+      { title: "Görev 7 - Dilimleme", atom: "Slicing", prompt: "Dilimlemenin başlangıç ve bitiş indekslerini takip ederek çıktıyı tahmin ediniz.", code: ["text = 'PYTHON'", "part = text[1:4]", "print(part)"] },
+      { title: "Görev 8 - Döngüde Biriktirme", atom: "Loop Accumulation", prompt: "Her döngü adımında total değişkeninin nasıl değiştiğini sesli açıklayınız.", code: ["total = 0", "for i in range(1, 4):", "    total = total + i", "print(total)"] },
+      { title: "Görev 9 - İç İçe Koşul", atom: "Nested Condition", prompt: "Girintileri ve koşul akışını takip ederek çıktıyı tahmin ediniz.", code: ["x = 7", "if x > 5:", "    if x % 2 == 0:", "        print('A')", "    else:", "        print('B')", "else:", "    print('C')"] },
+      { title: "Görev 10 - Fonksiyon ve Dönüş Değeri", atom: "Function Return", prompt: "Fonksiyonun hangi değeri döndürdüğünü takip ederek çıktıyı tahmin ediniz.", code: ["def add_one(n):", "    n = n + 1", "    return n", "x = 4", "y = add_one(x)", "print(x, y)"] },
+      { title: "Görev 11 - Liste Referansı", atom: "Aliasing / Reference", prompt: "a ve b listelerinin aynı nesneyi gösterip göstermediğini düşünerek çıktıyı tahmin ediniz.", code: ["a = [1, 2]", "b = a", "b.append(3)", "print(a)"] },
+      { title: "Görev 12 - Varsayılan Parametre", atom: "Default Mutable Argument", prompt: "Fonksiyon iki kez çağrıldığında liste içeriğinin nasıl değiştiğini sesli açıklayınız.", code: ["def add_item(x, items=[]):", "    items.append(x)", "    return items", "print(add_item(1))", "print(add_item(2))"] }
     ];
 
     let currentTaskIndex = 0;
@@ -279,13 +156,20 @@
     let startTime = null;
     let endTime = null;
     let stepCount = 0;
-    let helpCount = 0;
     let previousAOI = null;
     let previousGrid = null;
+    let heatmapVisible = false;
+
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let audioBlob = null;
+    let audioUrl = null;
 
     const sampleIntervalMs = 100;
     const fixationDurationThresholdMs = 200;
     const fixationRadiusPx = 60;
+    const calibrationSamplesPerPoint = 12;
+    const calibrationSampleIntervalMs = 140;
 
     const calibrationPoints = [
       [10, 10], [50, 10], [90, 10],
@@ -302,13 +186,11 @@
         opt.textContent = `${index + 1}. ${task.title}`;
         selector.appendChild(opt);
       });
+      setupHeatmapCanvas();
       loadTask(0);
     }
 
-    function loadSelectedTask() {
-      const index = parseInt(document.getElementById("taskSelector").value, 10);
-      loadTask(index);
-    }
+    function loadSelectedTask() { loadTask(parseInt(document.getElementById("taskSelector").value, 10)); }
 
     function loadTask(index) {
       currentTaskIndex = index;
@@ -317,9 +199,8 @@
       document.getElementById("taskInfo").textContent = `Görev ${index + 1} / ${tasks.length}`;
       document.getElementById("atomInfo").textContent = task.atom;
       document.getElementById("taskPrompt").textContent = task.prompt;
-     // document.getElementById("taskName").value = task.title;
       document.getElementById("answer").value = "";
-      document.getElementById("thinkAloudNote").value = "";
+      document.getElementById("observerNote").value = "";
       renderCode(task.code);
       setStatus(`${task.title} yüklendi.`);
     }
@@ -342,14 +223,8 @@
       });
     }
 
-    function previousTask() {
-      if (currentTaskIndex > 0) loadTask(currentTaskIndex - 1);
-    }
-
-    function nextTask() {
-      if (currentTaskIndex < tasks.length - 1) loadTask(currentTaskIndex + 1);
-    }
-
+    function previousTask() { if (currentTaskIndex > 0) loadTask(currentTaskIndex - 1); }
+    function nextTask() { if (currentTaskIndex < tasks.length - 1) loadTask(currentTaskIndex + 1); }
     function setStatus(message) { document.getElementById("status").textContent = "Durum: " + message; }
 
     async function startWebGazer() {
@@ -366,65 +241,110 @@
           dot.style.top = data.y + "px";
         })
         .begin();
+
       webgazer.showVideoPreview(true).showPredictionPoints(false);
       webgazer.showFaceOverlay(true);
-webgazer.showFaceFeedbackBox(true);
-      setStatus("Kamera aktif. Şimdi kalibrasyon yapabilirsiniz.");
+      webgazer.showFaceFeedbackBox(true);
+      setStatus("Kamera aktif. Yüz kutusunu kontrol edin, sonra otomatik kalibrasyon yapın.");
     }
 
     function startCalibration() {
+      if (typeof webgazer === "undefined") { alert("Önce kamerayı başlatınız."); return; }
       const screen = document.getElementById("calibrationScreen");
       screen.style.display = "block";
       calibrationIndex = 0;
-      showCalibrationPoint();
-      setStatus("Kalibrasyon başladı.");
+      showAutomaticCalibrationPoint();
+      setStatus("Otomatik kalibrasyon başladı. Öğrenci sadece kırmızı noktaya baksın.");
     }
 
-    function showCalibrationPoint() {
+    function showAutomaticCalibrationPoint() {
       const screen = document.getElementById("calibrationScreen");
       const oldPoint = document.querySelector(".calibration-point");
       if (oldPoint) oldPoint.remove();
+
       if (calibrationIndex >= calibrationPoints.length) {
         screen.style.display = "none";
-        setStatus("Kalibrasyon tamamlandı. Kaydı başlatabilirsiniz.");
+        setStatus("Otomatik kalibrasyon tamamlandı. Kaydı başlatabilirsiniz.");
         return;
       }
+
       const [xPercent, yPercent] = calibrationPoints[calibrationIndex];
       const point = document.createElement("div");
       point.className = "calibration-point";
       point.style.left = xPercent + "%";
       point.style.top = yPercent + "%";
-      let clicks = 0;
-      point.onclick = function() {
-        clicks++;
-
-          webgazer.recordScreenPosition(
-    point.getBoundingClientRect().left + point.offsetWidth / 2,
-    point.getBoundingClientRect().top + point.offsetHeight / 2,
-    'click'
-  );
-        if (clicks >= 3) { calibrationIndex++; showCalibrationPoint(); }
-      };
       screen.appendChild(point);
+
+      const counter = document.getElementById("calibrationCounter");
+      counter.textContent = `Nokta ${calibrationIndex + 1} / ${calibrationPoints.length}: Lütfen kırmızı noktaya bakınız.`;
+
+      setTimeout(() => {
+        const rect = point.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        let sampleCount = 0;
+
+        const sampler = setInterval(() => {
+          try { webgazer.recordScreenPosition(centerX, centerY, "click"); } catch (e) {}
+          sampleCount++;
+          counter.textContent = `Nokta ${calibrationIndex + 1} / ${calibrationPoints.length}: Örnek alınıyor ${sampleCount} / ${calibrationSamplesPerPoint}`;
+
+          if (sampleCount >= calibrationSamplesPerPoint) {
+            clearInterval(sampler);
+            calibrationIndex++;
+            setTimeout(showAutomaticCalibrationPoint, 350);
+          }
+        }, calibrationSampleIntervalMs);
+      }, 700);
     }
 
-    function startRecording() {
+    async function startAudioRecording() {
+      audioChunks = [];
+      audioBlob = null;
+      audioUrl = null;
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = event => {
+          if (event.data.size > 0) audioChunks.push(event.data);
+        };
+        mediaRecorder.onstop = () => {
+          audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+          audioUrl = URL.createObjectURL(audioBlob);
+          document.getElementById("audioStatus").textContent = "Ses kaydı hazır";
+          stream.getTracks().forEach(track => track.stop());
+        };
+        mediaRecorder.start();
+        document.getElementById("audioStatus").textContent = "Ses kaydı alınıyor";
+      } catch (error) {
+        document.getElementById("audioStatus").textContent = "Mikrofon izni alınamadı";
+        alert("Mikrofon izni alınamadı. Ses kaydı olmadan gaze kaydı devam edebilir.");
+      }
+    }
+
+    function stopAudioRecording() {
+      if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.stop();
+    }
+
+    async function startRecording() {
       const participantId = document.getElementById("participantId").value.trim();
       if (!participantId) { alert("Lütfen önce katılımcı kodunu giriniz."); return; }
       isRecording = true;
       startTime = new Date();
       endTime = null;
-      setStatus("Kayıt başladı. Öğrenciden problem çözümünü sesli yapmasını isteyiniz.");
-      setTimeout(() => {
-  if (gazeData.length === 0) {
-    alert("Henüz gaze verisi oluşmadı. Lütfen yüzünüz kamerada görünsün, kalibrasyon yapın ve kırmızı gaze noktasının ekranda hareket ettiğini kontrol edin.");
-  }
-}, 3000);
+      previousAOI = null;
+      previousGrid = null;
+      setStatus("Gaze ve ses kaydı başladı. Öğrenciden problem çözümünü sesli yapmasını isteyiniz.");
+      await startAudioRecording();
       recordingInterval = setInterval(recordGazeSample, sampleIntervalMs);
     }
 
     function recordGazeSample() {
-      if (!isRecording || !latestGaze) return;
+      if (!isRecording || !latestGaze) {
+        setStatus("Kayıt açık; ancak henüz gaze koordinatı gelmiyor. Yüz kutusu, ışık ve kalibrasyonu kontrol edin.");
+        return;
+      }
+
       const participantId = document.getElementById("participantId").value.trim();
       const task = tasks[currentTaskIndex];
       const taskName = task.title;
@@ -435,14 +355,7 @@ webgazer.showFaceFeedbackBox(true);
       const elapsedFromStartMs = startTime ? now - startTime : 0;
 
       if (previousAOI && previousAOI !== aoi) {
-        transitions.push({
-          participantId, taskName, atomType,
-          timestamp: now.toISOString(),
-          fromAOI: previousAOI,
-          toAOI: aoi,
-          fromGrid: previousGrid,
-          toGrid: grid
-        });
+        transitions.push({ participantId, taskName, atomType, timestamp: now.toISOString(), fromAOI: previousAOI, toAOI: aoi, fromGrid: previousGrid, toGrid: grid });
       }
 
       previousAOI = aoi;
@@ -461,12 +374,11 @@ webgazer.showFaceFeedbackBox(true);
         aoi,
         grid7x7: grid,
         stepCount,
-        helpCount,
-        taskCompletion: document.getElementById("taskCompletion").value,
         answerText: document.getElementById("answer").value.replace(/\n/g, " "),
-        thinkAloudNote: document.getElementById("thinkAloudNote").value.replace(/\n/g, " ")
+        observerNote: document.getElementById("observerNote").value.replace(/\n/g, " ")
       });
 
+      drawHeatPoint(latestGaze.x, latestGaze.y);
       detectFixations();
       updateSummary();
     }
@@ -475,15 +387,10 @@ webgazer.showFaceFeedbackBox(true);
       isRecording = false;
       endTime = new Date();
       if (recordingInterval) clearInterval(recordingInterval);
+      stopAudioRecording();
       detectFixations(true);
       updateSummary();
-      setStatus("Kayıt durduruldu.");
-    }
-
-    function markHelp() {
-      helpCount++;
-      document.getElementById("taskCompletion").value = "Completed with assistance";
-      updateSummary();
+      setStatus("Kayıt durduruldu. CSV ve ses dosyalarını indirebilirsiniz.");
     }
 
     function markStep() { stepCount++; updateSummary(); }
@@ -546,6 +453,31 @@ webgazer.showFaceFeedbackBox(true);
       }
     }
 
+    function setupHeatmapCanvas() {
+      const canvas = document.getElementById("heatmapCanvas");
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    function drawHeatPoint(x, y) {
+      const canvas = document.getElementById("heatmapCanvas");
+      const ctx = canvas.getContext("2d");
+      const radius = 38;
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      gradient.addColorStop(0, "rgba(255,0,0,0.22)");
+      gradient.addColorStop(0.45, "rgba(255,165,0,0.12)");
+      gradient.addColorStop(1, "rgba(255,255,0,0)");
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+
+    function toggleHeatmap() {
+      heatmapVisible = !heatmapVisible;
+      document.getElementById("heatmapCanvas").style.display = heatmapVisible ? "block" : "none";
+    }
+
     function getCompletionSeconds() {
       if (!startTime) return 0;
       const t = endTime ? endTime - startTime : new Date() - startTime;
@@ -556,7 +488,6 @@ webgazer.showFaceFeedbackBox(true);
       document.getElementById("recordCount").textContent = gazeData.length;
       document.getElementById("completionTime").textContent = getCompletionSeconds();
       document.getElementById("stepCount").textContent = stepCount;
-      document.getElementById("helpCount").textContent = helpCount;
       document.getElementById("fixationCount").textContent = fixationData.length;
 
       const counts = {};
@@ -598,7 +529,7 @@ webgazer.showFaceFeedbackBox(true);
     }
 
     function downloadRawCSV() {
-      const headers = ["participantId","taskNo","taskName","atomType","timestamp","elapsedFromStartMs","webgazerElapsedTime","x","y","aoi","grid7x7","stepCount","helpCount","taskCompletion","answerText","thinkAloudNote"];
+      const headers = ["participantId","taskNo","taskName","atomType","timestamp","elapsedFromStartMs","webgazerElapsedTime","x","y","aoi","grid7x7","stepCount","answerText","observerNote"];
       csvDownload(gazeData, headers, "raw_gaze_python_tasks.csv");
     }
 
@@ -611,9 +542,6 @@ webgazer.showFaceFeedbackBox(true);
       if (gazeData.length === 0) { alert("Henüz kayıtlı veri yok."); return; }
       const participantId = document.getElementById("participantId").value.trim();
       const completionTimeSec = getCompletionSeconds();
-      const minimumStep = 1;
-      const efficiency = minimumStep > 0 ? (completionTimeSec / minimumStep).toFixed(2) : "";
-
       const grouped = {};
       gazeData.forEach(d => {
         const key = `${d.taskNo}_${d.aoi}`;
@@ -630,11 +558,8 @@ webgazer.showFaceFeedbackBox(true);
           taskNo: first.taskNo,
           taskName: first.taskName,
           atomType: first.atomType,
-          taskCompletion: first.taskCompletion,
           completionTimeSec,
           stepCount,
-          helpCount,
-          efficiency_TimeDivMinimumStep: efficiency,
           totalGazeSamples: gazeData.length,
           totalFixationCount: fixationData.length,
           totalTransitionCount: transitions.length,
@@ -646,8 +571,17 @@ webgazer.showFaceFeedbackBox(true);
         };
       });
 
-      const headers = ["participantId","taskNo","taskName","atomType","taskCompletion","completionTimeSec","stepCount","helpCount","efficiency_TimeDivMinimumStep","totalGazeSamples","totalFixationCount","totalTransitionCount","aoi","aoiGazeCount","aoiDwellTimeMs","aoiFixationCount","aoiMeanFixationDurationMs"];
+      const headers = ["participantId","taskNo","taskName","atomType","completionTimeSec","stepCount","totalGazeSamples","totalFixationCount","totalTransitionCount","aoi","aoiGazeCount","aoiDwellTimeMs","aoiFixationCount","aoiMeanFixationDurationMs"];
       csvDownload(summaryRows, headers, "summary_efficiency_aoi_python_tasks.csv");
+    }
+
+    function downloadAudio() {
+      if (!audioBlob || !audioUrl) { alert("Henüz indirilebilir ses kaydı yok."); return; }
+      const participantId = document.getElementById("participantId").value.trim() || "participant";
+      const link = document.createElement("a");
+      link.href = audioUrl;
+      link.download = `${participantId}_think_aloud_audio.webm`;
+      link.click();
     }
 
     function resetData() {
@@ -656,15 +590,22 @@ webgazer.showFaceFeedbackBox(true);
       fixationData = [];
       transitions = [];
       stepCount = 0;
-      helpCount = 0;
       startTime = null;
       endTime = null;
       previousAOI = null;
       previousGrid = null;
+      audioChunks = [];
+      audioBlob = null;
+      audioUrl = null;
+      document.getElementById("audioStatus").textContent = "Hazır değil";
+      const canvas = document.getElementById("heatmapCanvas");
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       updateSummary();
       setStatus("Veriler temizlendi.");
     }
 
+    window.addEventListener("resize", setupHeatmapCanvas);
     window.onload = initTasks;
     window.onbeforeunload = function() { try { webgazer.end(); } catch (e) {} };
   </script>
