@@ -82,7 +82,7 @@
       <button onclick="downloadRawCSV()">Ham Gaze CSV</button>
       <button onclick="downloadSummaryCSV()">Özet Analiz CSV</button>
       <button onclick="downloadTransitionsCSV()">Scan Path CSV</button>
-      <button onclick="downloadReviewImage()">Kod Alanı Görselini İndir</button>
+      <button onclick="downloadReviewImage()">Isı yayılım görseli</button>
       <button onclick="downloadSessionPDF()">Oturum Raporu PDF İndir</button>
       <button onclick="downloadAudio()">Ses Kaydını İndir</button>
       <button onclick="downloadTranscript()">Ses Metnini İndir</button>
@@ -362,7 +362,11 @@
     function downloadRawCSV(){csvDownload(gazeData,["participantId","taskNo","taskName","atomType","timestamp","elapsedFromStartMs","x","y","aoi","grid7x7","stepCount","answerText","observerNote"],"raw_gaze_python_tasks.csv");}
     function downloadTransitionsCSV(){csvDownload(transitions,["participantId","taskName","atomType","timestamp","fromAOI","toAOI","fromGrid","toGrid"],"scan_path_transitions_python_tasks.csv");}
     function downloadSummaryCSV(){if(gazeData.length===0){alert("Henüz kayıtlı veri yok.");return;} const pid=document.getElementById("participantId").value.trim(), completionTimeSec=getCompletionSeconds(), grouped={}; gazeData.forEach(d=>{const key=`${d.taskNo}_${d.aoi}`; if(!grouped[key])grouped[key]=[]; grouped[key].push(d);}); const rows=Object.keys(grouped).map(key=>{const aoiRows=grouped[key], first=aoiRows[0], aoiFix=fixationData.filter(f=>f.taskNo===first.taskNo&&f.aoi===first.aoi); return{participantId:pid,taskNo:first.taskNo,taskName:first.taskName,atomType:first.atomType,completionTimeSec,stepCount,totalGazeSamples:gazeData.length,totalFixationCount:fixationData.length,totalTransitionCount:transitions.length,aoi:first.aoi,aoiGazeCount:aoiRows.length,aoiDwellTimeMs:aoiRows.length*sampleIntervalMs,aoiFixationCount:aoiFix.length,aoiMeanFixationDurationMs:aoiFix.length?Math.round(aoiFix.reduce((s,f)=>s+f.durationMs,0)/aoiFix.length):0};}); csvDownload(rows,["participantId","taskNo","taskName","atomType","completionTimeSec","stepCount","totalGazeSamples","totalFixationCount","totalTransitionCount","aoi","aoiGazeCount","aoiDwellTimeMs","aoiFixationCount","aoiMeanFixationDurationMs"],"summary_efficiency_aoi_python_tasks.csv");}
-    function buildReviewReportImageDataUrl(){
+    function buildReviewReportImageDataUrl(layer="combined"){
+      return buildReviewVisualizationDataUrl(layer);
+    }
+
+    function buildReviewVisualizationDataUrl(layer="combined"){
       const task=tasks[currentTaskIndex];
       const scale=2;
       const sourceW=Math.max(1, reviewWrapSnapshot.width || 1200);
@@ -371,114 +375,137 @@
       const cssH=Math.round(cssW * sourceH / sourceW);
       const sx=cssW/sourceW;
       const sy=cssH/sourceH;
-
       const out=document.createElement("canvas");
       out.width=cssW*scale;
       out.height=cssH*scale;
       const ctx=out.getContext("2d");
       ctx.scale(scale,scale);
-      ctx.fillStyle="#f7f7f7";
-      ctx.fillRect(0,0,cssW,cssH);
 
-      // Kod satırlarını rapor görselinin merkezine yeniden çizer.
-      const lines=task.code;
-      const fontSize=Math.min(52, Math.max(30, Math.floor(cssH/(lines.length*1.75))));
-      const lineH=fontSize*1.65;
-      const totalH=lines.length*lineH;
-      let y=(cssH-totalH)/2 + lineH/2;
-      ctx.font=`bold ${fontSize}px Consolas, Monaco, monospace`;
-      ctx.textBaseline="middle";
-      lines.forEach((line,i)=>{
-        ctx.fillStyle="#666";
-        ctx.textAlign="right";
-        ctx.fillText(String(i+1),120,y);
-        ctx.fillStyle="#111";
-        ctx.textAlign="left";
-        ctx.fillText(line,155,y);
-        y+=lineH;
-      });
+      const layerTitles={
+        heatmap:"Isı Yayılım Haritası / Heatmap",
+        grid:"Grid Dwell Süreleri",
+        fixations:"Fixation Noktaları",
+        scanpath:"Scanpath Çizgisi",
+        combined:"Heatmap + Grid Dwell + Scanpath + Fixations"
+      };
 
-      // Grid dwell haritası: Her hücreye yaklaşık bakış süresini yazar.
-      const cols=8, rows=6, cellW=cssW/cols, cellH=cssH/rows;
-      const dwellGrid=Array.from({length:rows},()=>Array(cols).fill(0));
-      reviewGaze.forEach(p=>{
-        const px=(p.nx!==undefined ? p.nx*cssW : p.x*sx);
-        const py=(p.ny!==undefined ? p.ny*cssH : p.y*sy);
-        const c=Math.min(cols-1,Math.max(0,Math.floor(px/cellW)));
-        const r=Math.min(rows-1,Math.max(0,Math.floor(py/cellH)));
-        dwellGrid[r][c]+=sampleIntervalMs;
-      });
-      const maxDwell=Math.max(1,...dwellGrid.flat());
-      for(let r=0;r<rows;r++){
-        for(let c=0;c<cols;c++){
-          if(dwellGrid[r][c]>0){
-            const alpha=0.10+0.45*(dwellGrid[r][c]/maxDwell);
-            ctx.fillStyle=`rgba(255,0,0,${alpha})`;
-            ctx.fillRect(c*cellW,r*cellH,cellW,cellH);
-          }
-          ctx.strokeStyle="rgba(0,0,0,0.22)";
-          ctx.lineWidth=1;
-          ctx.strokeRect(c*cellW,r*cellH,cellW,cellH);
-          if(dwellGrid[r][c]>0){
-            ctx.fillStyle="rgba(0,0,0,0.85)";
-            ctx.font="bold 15px Arial";
-            ctx.textAlign="center";
-            ctx.textBaseline="middle";
-            ctx.fillText((dwellGrid[r][c]/1000).toFixed(1)+"s",c*cellW+cellW/2,r*cellH+cellH/2);
+      function px(p){ return p.nx!==undefined ? p.nx*cssW : p.x*sx; }
+      function py(p){ return p.ny!==undefined ? p.ny*cssH : p.y*sy; }
+
+      function drawCodeBase(){
+        ctx.fillStyle="#f7f7f7";
+        ctx.fillRect(0,0,cssW,cssH);
+        const lines=task.code;
+        const fontSize=Math.min(52, Math.max(30, Math.floor(cssH/(lines.length*1.75))));
+        const lineH=fontSize*1.65;
+        const totalH=lines.length*lineH;
+        let y=(cssH-totalH)/2 + lineH/2;
+        ctx.font=`bold ${fontSize}px Consolas, Monaco, monospace`;
+        ctx.textBaseline="middle";
+        lines.forEach((line,i)=>{
+          ctx.fillStyle="#666";
+          ctx.textAlign="right";
+          ctx.fillText(String(i+1),120,y);
+          ctx.fillStyle="#111";
+          ctx.textAlign="left";
+          ctx.fillText(line,155,y);
+          y+=lineH;
+        });
+      }
+
+      function drawGridDwell(){
+        const cols=8, rows=6, cellW=cssW/cols, cellH=cssH/rows;
+        const dwellGrid=Array.from({length:rows},()=>Array(cols).fill(0));
+        reviewGaze.forEach(p=>{
+          const c=Math.min(cols-1,Math.max(0,Math.floor(px(p)/cellW)));
+          const r=Math.min(rows-1,Math.max(0,Math.floor(py(p)/cellH)));
+          dwellGrid[r][c]+=sampleIntervalMs;
+        });
+        const maxDwell=Math.max(1,...dwellGrid.flat());
+        for(let r=0;r<rows;r++){
+          for(let c=0;c<cols;c++){
+            if(dwellGrid[r][c]>0){
+              const alpha=0.12+0.50*(dwellGrid[r][c]/maxDwell);
+              ctx.fillStyle=`rgba(255,0,0,${alpha})`;
+              ctx.fillRect(c*cellW,r*cellH,cellW,cellH);
+            }
+            ctx.strokeStyle="rgba(0,0,0,0.30)";
+            ctx.lineWidth=1;
+            ctx.strokeRect(c*cellW,r*cellH,cellW,cellH);
+            if(dwellGrid[r][c]>0){
+              ctx.fillStyle="rgba(0,0,0,0.88)";
+              ctx.font="bold 16px Arial";
+              ctx.textAlign="center";
+              ctx.textBaseline="middle";
+              ctx.fillText((dwellGrid[r][c]/1000).toFixed(1)+"s",c*cellW+cellW/2,r*cellH+cellH/2);
+            }
           }
         }
       }
 
-      // Isı haritası: Noktalar normalize edilerek rapor boyutuna ölçeklenir.
-      reviewGaze.forEach(p=>{
-        const px=(p.nx!==undefined ? p.nx*cssW : p.x*sx);
-        const py=(p.ny!==undefined ? p.ny*cssH : p.y*sy);
-        const radius=70;
-        const g=ctx.createRadialGradient(px,py,0,px,py,radius);
-        g.addColorStop(0,"rgba(255,0,0,0.34)");
-        g.addColorStop(0.35,"rgba(255,140,0,0.22)");
-        g.addColorStop(0.70,"rgba(255,255,0,0.10)");
-        g.addColorStop(1,"rgba(255,255,0,0)");
-        ctx.fillStyle=g;
-        ctx.beginPath();
-        ctx.arc(px,py,radius,0,2*Math.PI);
-        ctx.fill();
-      });
-
-      // Scanpath çizgisi.
-      if(reviewGaze.length>1){
-        ctx.strokeStyle="rgba(0,70,255,0.65)";
-        ctx.lineWidth=3;
-        ctx.beginPath();
-        ctx.moveTo(reviewGaze[0].nx*cssW, reviewGaze[0].ny*cssH);
-        for(let i=1;i<reviewGaze.length;i++) ctx.lineTo(reviewGaze[i].nx*cssW, reviewGaze[i].ny*cssH);
-        ctx.stroke();
+      function drawHeatmap(){
+        reviewGaze.forEach(p=>{
+          const x=px(p), y=py(p), radius=76;
+          const g=ctx.createRadialGradient(x,y,0,x,y,radius);
+          g.addColorStop(0,"rgba(255,0,0,0.38)");
+          g.addColorStop(0.35,"rgba(255,140,0,0.24)");
+          g.addColorStop(0.70,"rgba(255,255,0,0.12)");
+          g.addColorStop(1,"rgba(255,255,0,0)");
+          ctx.fillStyle=g;
+          ctx.beginPath();
+          ctx.arc(x,y,radius,0,2*Math.PI);
+          ctx.fill();
+        });
       }
 
-      // Fixation noktaları.
-      ctx.font="bold 16px Arial";
-      ctx.textAlign="center";
-      ctx.textBaseline="middle";
-      reviewFixations.forEach((f,i)=>{
-        const fx=f.x*sx;
-        const fy=f.y*sy;
-        ctx.fillStyle="rgba(0,80,255,0.68)";
+      function drawScanpath(){
+        if(reviewGaze.length<=1) return;
+        ctx.strokeStyle="rgba(0,70,255,0.72)";
+        ctx.lineWidth=4;
         ctx.beginPath();
-        ctx.arc(fx,fy,Math.min(40,14+f.duration/120),0,2*Math.PI);
-        ctx.fill();
-        ctx.strokeStyle="rgba(0,0,120,0.95)";
-        ctx.lineWidth=2;
+        ctx.moveTo(px(reviewGaze[0]), py(reviewGaze[0]));
+        for(let i=1;i<reviewGaze.length;i++) ctx.lineTo(px(reviewGaze[i]), py(reviewGaze[i]));
         ctx.stroke();
-        ctx.fillStyle="#fff";
-        ctx.fillText((f.duration/1000).toFixed(1)+"s",fx,fy+2);
-        ctx.fillStyle="#000";
-        ctx.fillText(String(i+1),fx,fy-32);
-      });
+        ctx.fillStyle="rgba(0,70,255,0.85)";
+        reviewGaze.forEach((p,i)=>{
+          if(i%5!==0 && i!==reviewGaze.length-1) return;
+          ctx.beginPath();
+          ctx.arc(px(p),py(p),5,0,2*Math.PI);
+          ctx.fill();
+        });
+      }
+
+      function drawFixations(){
+        ctx.font="bold 16px Arial";
+        ctx.textAlign="center";
+        ctx.textBaseline="middle";
+        reviewFixations.forEach((f,i)=>{
+          const fx=f.x*sx;
+          const fy=f.y*sy;
+          ctx.fillStyle="rgba(0,80,255,0.70)";
+          ctx.beginPath();
+          ctx.arc(fx,fy,Math.min(46,16+f.duration/120),0,2*Math.PI);
+          ctx.fill();
+          ctx.strokeStyle="rgba(0,0,120,0.95)";
+          ctx.lineWidth=2;
+          ctx.stroke();
+          ctx.fillStyle="#fff";
+          ctx.fillText((f.duration/1000).toFixed(1)+"s",fx,fy+2);
+          ctx.fillStyle="#000";
+          ctx.fillText(String(i+1),fx,fy-34);
+        });
+      }
+
+      drawCodeBase();
+      if(layer==="grid" || layer==="combined") drawGridDwell();
+      if(layer==="heatmap" || layer==="combined") drawHeatmap();
+      if(layer==="scanpath" || layer==="combined") drawScanpath();
+      if(layer==="fixations" || layer==="combined") drawFixations();
 
       ctx.fillStyle="#000";
       ctx.textAlign="left";
       ctx.font="bold 22px Arial";
-      ctx.fillText(`${task.title} | Heatmap + Grid Dwell + Scanpath + Fixations`,24,30);
+      ctx.fillText(`${task.title} | ${layerTitles[layer] || layerTitles.combined}`,24,30);
       ctx.font="16px Arial";
       ctx.fillText(`Review gaze: ${reviewGaze.length} | Review fixation: ${reviewFixations.length}`,24,58);
       if(reviewGaze.length===0){
@@ -490,29 +517,41 @@
     }
 
     function downloadReviewImage(){
-      if(!lastReviewImageDataUrl) lastReviewImageDataUrl=buildReviewReportImageDataUrl();
+      lastReviewImageDataUrl=buildReviewVisualizationDataUrl("heatmap");
       const pid=document.getElementById("participantId").value.trim()||"participant";
-      const link=document.createElement("a"); link.href=lastReviewImageDataUrl; link.download=`${pid}_code_heatmap_scanpath_fixations.png`; link.click();
+      const link=document.createElement("a"); link.href=lastReviewImageDataUrl; link.download=`${pid}_isi_yayilim_heatmap.png`; link.click();
     }
 
     async function downloadSessionPDF(){
       try{
-        if(!lastReviewImageDataUrl) lastReviewImageDataUrl=buildReviewReportImageDataUrl();
         if(!window.jspdf || !window.jspdf.jsPDF){ alert("PDF kütüphanesi yüklenemedi. İnternet bağlantısını ve jsPDF CDN erişimini kontrol edin."); return; }
         const { jsPDF } = window.jspdf;
         const pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
         const pid=document.getElementById("participantId").value.trim()||"participant";
         const task=tasks[currentTaskIndex];
         const now=new Date().toISOString();
+        const pageW=297, pageH=210;
+        const imgX=14, imgY=34, imgW=268, imgH=160;
 
-        pdf.setFontSize(18); pdf.text("Gaze Tracking Oturum Raporu",14,15);
-        pdf.setFontSize(10);
-        pdf.text(`Katılımcı: ${pid}`,14,24);
-        pdf.text(`Görev: ${task.title}`,14,30);
-        pdf.text(`Kod örüntüsü: ${task.atom}`,14,36);
-        pdf.text(`Tarih: ${now}`,14,42);
-        pdf.text(`15 sn gaze kaydı: ${reviewGaze.length} | İnceleme fixation: ${reviewFixations.length} | Toplam gaze: ${gazeData.length}`,14,48);
-        pdf.addImage(lastReviewImageDataUrl,"PNG",14,55,268,140);
+        function addHeader(title){
+          pdf.setFontSize(18); pdf.text(title,14,15);
+          pdf.setFontSize(10);
+          pdf.text(`Katılımcı: ${pid}`,14,23);
+          pdf.text(`Görev: ${task.title}`,75,23);
+          pdf.text(`Tarih: ${now}`,14,29);
+          pdf.text(`15 sn gaze kaydı: ${reviewGaze.length} | Fixation: ${reviewFixations.length} | Toplam gaze: ${gazeData.length}`,170,29);
+        }
+        function addVisualPage(title, layer, first=false){
+          if(!first) pdf.addPage("a4","landscape");
+          addHeader(title);
+          const img=buildReviewVisualizationDataUrl(layer);
+          pdf.addImage(img,"PNG",imgX,imgY,imgW,imgH);
+        }
+
+        addVisualPage("Gaze Tracking Oturum Raporu - Isı Yayılım Haritası", "heatmap", true);
+        addVisualPage("Gaze Tracking Oturum Raporu - Grid Dwell Süreleri", "grid");
+        addVisualPage("Gaze Tracking Oturum Raporu - Fixation Noktaları", "fixations");
+        addVisualPage("Gaze Tracking Oturum Raporu - Scanpath", "scanpath");
 
         pdf.addPage("a4","portrait");
         pdf.setFontSize(16); pdf.text("Sesli Düşünme Metni",14,18);
