@@ -117,8 +117,7 @@
             <div class="aoi-title">AOI 3: Cevap Alanı</div>
             <label>Tahmin edilen çıktı:</label>
             <textarea id="answer" style="width:100%; height:120px;" placeholder="Öğrenci çıktıyı buraya yazar..."></textarea>
-            <label>Araştırmacı gözlem notu:</label>
-            <textarea id="observerNote" style="width:100%; height:120px;" placeholder="Kısa gözlem notu..."></textarea>
+            
           </div>
         </div>
       </div>
@@ -126,7 +125,7 @@
 
     <section class="panel">
       <h2>Canlı Veri Özeti</h2>
-      <p>Toplam gaze kayıt sayısı: <span id="recordCount">0</span></p>
+      <p>20 sn inceleme gaze kayıt sayısı: <span id="recordCount">0</span></p>
       <p>Task completion time: <span id="completionTime">0</span> sn</p>
       <p>Step count: <span id="stepCount">0</span></p>
       <p>Total fixation/focus count: <span id="fixationCount">0</span></p>
@@ -270,14 +269,14 @@
 
     function updateGazePoint(x,y){
       if(lastGaze){x=lastGaze.x*smoothingAlpha+x*(1-smoothingAlpha); y=lastGaze.y*smoothingAlpha+y*(1-smoothingAlpha);} lastGaze={x,y,elapsedTime:performance.now()};
-      const dot=document.getElementById("gazeDot"); dot.style.display="block"; dot.style.left=x+"px"; dot.style.top=y+"px";
-      if(isRecording) recordGazeSample(lastGaze);
+      const dot=document.getElementById("gazeDot"); dot.style.display="none";
+      if(isRecording && isReviewMode) recordGazeSample(lastGaze);
     }
 
-    async function startRecording(){const pid=document.getElementById("participantId").value.trim(); if(!pid){alert("Lütfen önce katılımcı kodunu giriniz.");return;} if(!isCalibrated){alert("Lütfen önce otomatik kalibrasyonu tamamlayınız.");return;} isRecording=true; startTime=new Date(); endTime=null; previousAOI=null; previousGrid=null; lastRecordedAt=0; setStatus("Gaze ve ses kaydı başladı. Öğrenciden problem çözümünü sesli yapmasını isteyiniz."); await startAudioRecording(); startSpeechRecognition();}
+    async function startRecording(){const pid=document.getElementById("participantId").value.trim(); if(!pid){alert("Lütfen önce katılımcı kodunu giriniz.");return;} if(!isCalibrated){alert("Lütfen önce otomatik kalibrasyonu tamamlayınız.");return;} startTime=new Date(); endTime=null; previousAOI=null; previousGrid=null; lastRecordedAt=0; setStatus("Ses kaydı başladı. Göz takip verisi yalnızca 20 sn Kod İnceleme Modu sırasında alınacaktır."); await startAudioRecording(); startSpeechRecognition();}
     function startCodeReviewMode(){
-      if(!isRecording){alert("Önce Gaze + Ses kaydını başlatınız."); return;} if(!isCalibrated){alert("Önce kalibrasyon yapınız."); return;}
-      const task=tasks[currentTaskIndex]; reviewGaze=[]; reviewFixations=[]; lastReviewImageDataUrl=null; isReviewMode=true;
+      if(!mediaRecorder || mediaRecorder.state!=="recording"){alert("Önce Gaze + Ses Kaydını Başlat butonuyla ses kaydını başlatınız."); return;} if(!isCalibrated){alert("Önce kalibrasyon yapınız."); return;}
+      const task=tasks[currentTaskIndex]; reviewGaze=[]; reviewFixations=[]; gazeData=[]; fixationData=[]; transitions=[]; lastReviewImageDataUrl=null; isReviewMode=true; isRecording=true; lastRecordedAt=0; startTime=new Date(); endTime=null; previousAOI=null; previousGrid=null;
       document.getElementById("reviewOverlay").style.display="block";
       document.getElementById("reviewTitle").textContent=`${task.title} - 20 sn Kod İnceleme`;
       renderCode(document.getElementById("reviewCode"), task.code);
@@ -291,13 +290,19 @@
         document.getElementById("reviewTimer").textContent=remaining;
         if(remaining<=0){
           clearInterval(timer);
-          isReviewMode=false;
-          document.getElementById("reviewOverlay").style.display="none";
-          document.getElementById("reviewStatus").textContent="İnceleme tamamlandı";
-          finalizeReviewVisual();
-          setStatus("20 sn kod inceleme tamamlandı. Oturum raporunu PDF olarak indirebilirsiniz.");
+          finishReviewMode();
         }
       },1000);
+    }
+    function finishReviewMode(){
+      isReviewMode=false;
+      isRecording=false;
+      endTime=new Date();
+      document.getElementById("reviewOverlay").style.display="none";
+      document.getElementById("reviewStatus").textContent="İnceleme tamamlandı";
+      finalizeReviewVisual();
+      updateSummary();
+      setStatus("20 sn kod inceleme tamamlandı. Göz takip kaydı durdu; ses kaydı devam edebilir. Oturum raporunu PDF olarak indirebilirsiniz.");
     }
     function resizeReviewCanvas(){const wrap=document.getElementById("reviewCodeWrap"), c=document.getElementById("reviewVisualCanvas"); c.width=wrap.clientWidth; c.height=wrap.clientHeight;}
     function clearReviewCanvas(){const c=document.getElementById("reviewVisualCanvas"), ctx=c.getContext("2d"); ctx.clearRect(0,0,c.width,c.height);}
@@ -305,7 +310,7 @@
       if(!isRecording||!gaze)return; const nowMs=performance.now(); if(nowMs-lastRecordedAt<sampleIntervalMs)return; lastRecordedAt=nowMs;
       const pid=document.getElementById("participantId").value.trim(), task=tasks[currentTaskIndex], aoi=detectAOI(gaze.x,gaze.y), grid=detectGrid7x7(gaze.x,gaze.y), now=new Date(), elapsedFromStartMs=startTime?now-startTime:0;
       if(previousAOI&&previousAOI!==aoi) transitions.push({participantId:pid,taskName:task.title,atomType:task.atom,timestamp:now.toISOString(),fromAOI:previousAOI,toAOI:aoi,fromGrid:previousGrid,toGrid:grid}); previousAOI=aoi; previousGrid=grid;
-      gazeData.push({participantId:pid,taskNo:currentTaskIndex+1,taskName:task.title,atomType:task.atom,timestamp:now.toISOString(),elapsedFromStartMs,x:Math.round(gaze.x),y:Math.round(gaze.y),aoi,grid7x7:grid,stepCount,answerText:document.getElementById("answer").value.replace(/\n/g," "),observerNote:document.getElementById("observerNote").value.replace(/\n/g," ")});
+      gazeData.push({participantId:pid,taskNo:currentTaskIndex+1,taskName:task.title,atomType:task.atom,timestamp:now.toISOString(),elapsedFromStartMs,x:Math.round(gaze.x),y:Math.round(gaze.y),aoi,grid7x7:grid,stepCount,answerText:document.getElementById("answer").value.replace(/\n/g," "),observerNote:""});
       if(isReviewMode) recordReviewGaze(gaze); detectFixations(); updateSummary();
     }
     function recordReviewGaze(gaze){const wrap=document.getElementById("reviewCodeWrap"), r=wrap.getBoundingClientRect(); if(gaze.x<r.left||gaze.x>r.right||gaze.y<r.top||gaze.y>r.bottom)return; const lx=gaze.x-r.left, ly=gaze.y-r.top; reviewGaze.push({x:lx,y:ly,t:performance.now()}); drawReviewHeatPoint(lx,ly); drawReviewPathLive();}
@@ -322,7 +327,7 @@
     function computeReviewFixations(){reviewFixations=[]; if(reviewGaze.length<3)return; let cluster=[]; for(const p of reviewGaze){if(cluster.length===0){cluster.push(p);continue;} const cx=cluster.reduce((s,d)=>s+d.x,0)/cluster.length, cy=cluster.reduce((s,d)=>s+d.y,0)/cluster.length; if(Math.hypot(p.x-cx,p.y-cy)<=fixationRadiusPx){cluster.push(p);} else {pushReviewFixation(cluster); cluster=[p];}} pushReviewFixation(cluster);}
     function pushReviewFixation(cluster){if(cluster.length<3)return; const duration=cluster[cluster.length-1].t-cluster[0].t; if(duration>=fixationDurationThresholdMs){reviewFixations.push({x:cluster.reduce((s,d)=>s+d.x,0)/cluster.length,y:cluster.reduce((s,d)=>s+d.y,0)/cluster.length,duration});}}
 
-    function stopRecording(){isRecording=false; isReviewMode=false; endTime=new Date(); document.getElementById("reviewOverlay").style.display="none"; stopAudioRecording(); stopSpeechRecognition(); detectFixations(); updateSummary(); setStatus("Kayıt durduruldu. CSV, görsel, ses ve konuşma metni dosyalarını indirebilirsiniz.");}
+    function stopRecording(){isRecording=false; isReviewMode=false; endTime=new Date(); document.getElementById("reviewOverlay").style.display="none"; stopAudioRecording(); stopSpeechRecognition(); detectFixations(); updateSummary(); setStatus("Ses kaydı durduruldu. CSV, görsel, ses ve konuşma metni dosyalarını indirebilirsiniz.");}
 
     async function startAudioRecording(){audioChunks=[]; audioBlob=null; audioUrl=null; try{const stream=await navigator.mediaDevices.getUserMedia({audio:true}); mediaRecorder=new MediaRecorder(stream); mediaRecorder.ondataavailable=e=>{if(e.data.size>0)audioChunks.push(e.data);}; mediaRecorder.onstop=()=>{audioBlob=new Blob(audioChunks,{type:"audio/webm"}); audioUrl=URL.createObjectURL(audioBlob); document.getElementById("audioStatus").textContent="Ses kaydı hazır"; stream.getTracks().forEach(t=>t.stop());}; mediaRecorder.start(); document.getElementById("audioStatus").textContent="Ses kaydı alınıyor";}catch(e){document.getElementById("audioStatus").textContent="Mikrofon izni alınamadı";}}
     function stopAudioRecording(){if(mediaRecorder&&mediaRecorder.state==="recording")mediaRecorder.stop();}
@@ -341,50 +346,113 @@
     function downloadTransitionsCSV(){csvDownload(transitions,["participantId","taskName","atomType","timestamp","fromAOI","toAOI","fromGrid","toGrid"],"scan_path_transitions_python_tasks.csv");}
     function downloadSummaryCSV(){if(gazeData.length===0){alert("Henüz kayıtlı veri yok.");return;} const pid=document.getElementById("participantId").value.trim(), completionTimeSec=getCompletionSeconds(), grouped={}; gazeData.forEach(d=>{const key=`${d.taskNo}_${d.aoi}`; if(!grouped[key])grouped[key]=[]; grouped[key].push(d);}); const rows=Object.keys(grouped).map(key=>{const aoiRows=grouped[key], first=aoiRows[0], aoiFix=fixationData.filter(f=>f.taskNo===first.taskNo&&f.aoi===first.aoi); return{participantId:pid,taskNo:first.taskNo,taskName:first.taskName,atomType:first.atomType,completionTimeSec,stepCount,totalGazeSamples:gazeData.length,totalFixationCount:fixationData.length,totalTransitionCount:transitions.length,aoi:first.aoi,aoiGazeCount:aoiRows.length,aoiDwellTimeMs:aoiRows.length*sampleIntervalMs,aoiFixationCount:aoiFix.length,aoiMeanFixationDurationMs:aoiFix.length?Math.round(aoiFix.reduce((s,f)=>s+f.durationMs,0)/aoiFix.length):0};}); csvDownload(rows,["participantId","taskNo","taskName","atomType","completionTimeSec","stepCount","totalGazeSamples","totalFixationCount","totalTransitionCount","aoi","aoiGazeCount","aoiDwellTimeMs","aoiFixationCount","aoiMeanFixationDurationMs"],"summary_efficiency_aoi_python_tasks.csv");}
     function buildReviewReportImageDataUrl(){
-      const wrap=document.getElementById("reviewCodeWrap"), scale=2;
-      const out=document.createElement("canvas"); out.width=wrap.clientWidth*scale; out.height=wrap.clientHeight*scale;
-      const ctx=out.getContext("2d"); ctx.scale(scale,scale);
-      ctx.fillStyle="#f7f7f7"; ctx.fillRect(0,0,wrap.clientWidth,wrap.clientHeight);
+      const task=tasks[currentTaskIndex];
+      const scale=2;
+      const cssW=Math.max(1200, window.innerWidth-80);
+      const cssH=Math.max(720, window.innerHeight-140);
+      const out=document.createElement("canvas");
+      out.width=cssW*scale;
+      out.height=cssH*scale;
+      const ctx=out.getContext("2d");
+      ctx.scale(scale,scale);
+      ctx.fillStyle="#f7f7f7";
+      ctx.fillRect(0,0,cssW,cssH);
 
-      // kareli bölge / grid
-      const cols=8, rows=6, cellW=wrap.clientWidth/cols, cellH=wrap.clientHeight/rows;
+      const cols=8, rows=6, cellW=cssW/cols, cellH=cssH/rows;
       const dwellGrid=Array.from({length:rows},()=>Array(cols).fill(0));
-      reviewGaze.forEach(p=>{ const c=Math.min(cols-1,Math.max(0,Math.floor(p.x/cellW))); const r=Math.min(rows-1,Math.max(0,Math.floor(p.y/cellH))); dwellGrid[r][c]+=sampleIntervalMs; });
+      reviewGaze.forEach(p=>{
+        const c=Math.min(cols-1,Math.max(0,Math.floor(p.x/cellW)));
+        const r=Math.min(rows-1,Math.max(0,Math.floor(p.y/cellH)));
+        dwellGrid[r][c]+=sampleIntervalMs;
+      });
 
       const maxDwell=Math.max(1,...dwellGrid.flat());
       for(let r=0;r<rows;r++){
         for(let c=0;c<cols;c++){
-          const alpha=0.08+0.42*(dwellGrid[r][c]/maxDwell);
-          if(dwellGrid[r][c]>0){ ctx.fillStyle=`rgba(255,0,0,${alpha})`; ctx.fillRect(c*cellW,r*cellH,cellW,cellH); }
-          ctx.strokeStyle="rgba(0,0,0,0.18)"; ctx.lineWidth=1; ctx.strokeRect(c*cellW,r*cellH,cellW,cellH);
-          if(dwellGrid[r][c]>0){ ctx.fillStyle="rgba(0,0,0,0.75)"; ctx.font="bold 13px Arial"; ctx.textAlign="center"; ctx.fillText((dwellGrid[r][c]/1000).toFixed(1)+"s",c*cellW+cellW/2,r*cellH+cellH/2); }
+          if(dwellGrid[r][c]>0){
+            const alpha=0.10+0.45*(dwellGrid[r][c]/maxDwell);
+            ctx.fillStyle=`rgba(255,0,0,${alpha})`;
+            ctx.fillRect(c*cellW,r*cellH,cellW,cellH);
+          }
+          ctx.strokeStyle="rgba(0,0,0,0.22)";
+          ctx.lineWidth=1;
+          ctx.strokeRect(c*cellW,r*cellH,cellW,cellH);
+          if(dwellGrid[r][c]>0){
+            ctx.fillStyle="rgba(0,0,0,0.80)";
+            ctx.font="bold 15px Arial";
+            ctx.textAlign="center";
+            ctx.textBaseline="middle";
+            ctx.fillText((dwellGrid[r][c]/1000).toFixed(1)+"s",c*cellW+cellW/2,r*cellH+cellH/2);
+          }
         }
       }
 
-      // kod metni
-      const lines=tasks[currentTaskIndex].code;
-      ctx.font="38px Consolas, Monaco, monospace"; ctx.textBaseline="middle";
-      const lineH=64;
+      const lines=task.code;
+      ctx.font="bold 52px Consolas, Monaco, monospace";
+      ctx.textBaseline="middle";
+      const lineH=82;
       const totalH=lines.length*lineH;
-      let y=(wrap.clientHeight-totalH)/2 + lineH/2;
-      lines.forEach((line,i)=>{ ctx.fillStyle="#777"; ctx.textAlign="right"; ctx.fillText(String(i+1),90,y); ctx.fillStyle="#111"; ctx.textAlign="left"; ctx.fillText(line,120,y); y+=lineH; });
-
-      // heatmap noktaları
-      reviewGaze.forEach(p=>{
-        const radius=40, g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);
-        g.addColorStop(0,"rgba(255,0,0,0.18)"); g.addColorStop(.5,"rgba(255,165,0,0.08)"); g.addColorStop(1,"rgba(255,255,0,0)");
-        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(p.x,p.y,radius,0,2*Math.PI); ctx.fill();
+      let y=(cssH-totalH)/2 + lineH/2;
+      lines.forEach((line,i)=>{
+        ctx.fillStyle="#666";
+        ctx.textAlign="right";
+        ctx.fillText(String(i+1),130,y);
+        ctx.fillStyle="#111";
+        ctx.textAlign="left";
+        ctx.fillText(line,165,y);
+        y+=lineH;
       });
 
-      // scanpath çizgileri
-      if(reviewGaze.length>1){ ctx.strokeStyle="rgba(0,70,255,0.50)"; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(reviewGaze[0].x,reviewGaze[0].y); for(let i=1;i<reviewGaze.length;i++) ctx.lineTo(reviewGaze[i].x,reviewGaze[i].y); ctx.stroke(); }
+      // Heatmap katmanı: reviewGaze verisi varsa kesin görünür yoğunluk üretir.
+      reviewGaze.forEach(p=>{
+        const radius=52;
+        const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,radius);
+        g.addColorStop(0,"rgba(255,0,0,0.28)");
+        g.addColorStop(0.45,"rgba(255,165,0,0.14)");
+        g.addColorStop(1,"rgba(255,255,0,0)");
+        ctx.fillStyle=g;
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,radius,0,2*Math.PI);
+        ctx.fill();
+      });
 
-      // fixation noktaları ve bekleme süreleri
-      ctx.font="bold 14px Arial"; ctx.textAlign="center"; ctx.textBaseline="middle";
-      reviewFixations.forEach((f,i)=>{ ctx.fillStyle="rgba(0,80,255,0.62)"; ctx.beginPath(); ctx.arc(f.x,f.y,Math.min(34,12+f.duration/120),0,2*Math.PI); ctx.fill(); ctx.strokeStyle="rgba(0,0,120,0.95)"; ctx.lineWidth=2; ctx.stroke(); ctx.fillStyle="#fff"; ctx.fillText((f.duration/1000).toFixed(1)+"s",f.x,f.y+2); ctx.fillStyle="#000"; ctx.fillText(String(i+1),f.x,f.y-26); });
+      if(reviewGaze.length>1){
+        ctx.strokeStyle="rgba(0,70,255,0.60)";
+        ctx.lineWidth=3;
+        ctx.beginPath();
+        ctx.moveTo(reviewGaze[0].x,reviewGaze[0].y);
+        for(let i=1;i<reviewGaze.length;i++) ctx.lineTo(reviewGaze[i].x,reviewGaze[i].y);
+        ctx.stroke();
+      }
 
-      // başlık
-      ctx.fillStyle="#000"; ctx.textAlign="left"; ctx.font="bold 18px Arial"; ctx.fillText(`${tasks[currentTaskIndex].title} | Heatmap + Grid Dwell + Scanpath + Fixations`,18,22);
+      ctx.font="bold 16px Arial";
+      ctx.textAlign="center";
+      ctx.textBaseline="middle";
+      reviewFixations.forEach((f,i)=>{
+        ctx.fillStyle="rgba(0,80,255,0.68)";
+        ctx.beginPath();
+        ctx.arc(f.x,f.y,Math.min(40,14+f.duration/120),0,2*Math.PI);
+        ctx.fill();
+        ctx.strokeStyle="rgba(0,0,120,0.95)";
+        ctx.lineWidth=2;
+        ctx.stroke();
+        ctx.fillStyle="#fff";
+        ctx.fillText((f.duration/1000).toFixed(1)+"s",f.x,f.y+2);
+        ctx.fillStyle="#000";
+        ctx.fillText(String(i+1),f.x,f.y-32);
+      });
+
+      ctx.fillStyle="#000";
+      ctx.textAlign="left";
+      ctx.font="bold 22px Arial";
+      ctx.fillText(`${task.title} | Heatmap + Grid Dwell + Scanpath + Fixations`,24,30);
+      ctx.font="16px Arial";
+      ctx.fillText(`Review gaze: ${reviewGaze.length} | Review fixation: ${reviewFixations.length}`,24,58);
+      if(reviewGaze.length===0){
+        ctx.fillStyle="#b3261e";
+        ctx.font="bold 22px Arial";
+        ctx.fillText("Uyarı: 20 sn inceleme sırasında kod alanı üzerinde gaze verisi kaydedilmedi.",24,90);
+      }
       return out.toDataURL("image/png");
     }
 
@@ -395,38 +463,44 @@
     }
 
     async function downloadSessionPDF(){
-      if(!lastReviewImageDataUrl) lastReviewImageDataUrl=buildReviewReportImageDataUrl();
-      const { jsPDF } = window.jspdf;
-      const pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
-      const pid=document.getElementById("participantId").value.trim()||"participant";
-      const task=tasks[currentTaskIndex];
-      const now=new Date().toISOString();
+      try{
+        if(!lastReviewImageDataUrl) lastReviewImageDataUrl=buildReviewReportImageDataUrl();
+        if(!window.jspdf || !window.jspdf.jsPDF){ alert("PDF kütüphanesi yüklenemedi. İnternet bağlantısını ve jsPDF CDN erişimini kontrol edin."); return; }
+        const { jsPDF } = window.jspdf;
+        const pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+        const pid=document.getElementById("participantId").value.trim()||"participant";
+        const task=tasks[currentTaskIndex];
+        const now=new Date().toISOString();
 
-      pdf.setFontSize(18); pdf.text("Gaze Tracking Oturum Raporu",14,15);
-      pdf.setFontSize(10);
-      pdf.text(`Katılımcı: ${pid}`,14,24);
-      pdf.text(`Görev: ${task.title}`,14,30);
-      pdf.text(`Kod örüntüsü: ${task.atom}`,14,36);
-      pdf.text(`Tarih: ${now}`,14,42);
-      pdf.text(`Toplam gaze kaydı: ${gazeData.length} | Fixation: ${fixationData.length} | İnceleme gaze: ${reviewGaze.length} | İnceleme fixation: ${reviewFixations.length}`,14,48);
-      pdf.addImage(lastReviewImageDataUrl,"PNG",14,55,268,140);
+        pdf.setFontSize(18); pdf.text("Gaze Tracking Oturum Raporu",14,15);
+        pdf.setFontSize(10);
+        pdf.text(`Katılımcı: ${pid}`,14,24);
+        pdf.text(`Görev: ${task.title}`,14,30);
+        pdf.text(`Kod örüntüsü: ${task.atom}`,14,36);
+        pdf.text(`Tarih: ${now}`,14,42);
+        pdf.text(`20 sn gaze kaydı: ${reviewGaze.length} | İnceleme fixation: ${reviewFixations.length} | Toplam gaze: ${gazeData.length}`,14,48);
+        pdf.addImage(lastReviewImageDataUrl,"PNG",14,55,268,140);
 
-      pdf.addPage("a4","portrait");
-      pdf.setFontSize(16); pdf.text("Sesli Düşünme Metni",14,18);
-      pdf.setFontSize(10);
-      const text=transcriptText.trim() || "Konuşma metni oluşmadı / kaydedilmedi.";
-      const split=pdf.splitTextToSize(text,180);
-      pdf.text(split,14,28);
+        pdf.addPage("a4","portrait");
+        pdf.setFontSize(16); pdf.text("Sesli Düşünme Metni",14,18);
+        pdf.setFontSize(10);
+        const text=transcriptText.trim() || "Konuşma metni oluşmadı / kaydedilmedi.";
+        const split=pdf.splitTextToSize(text,180);
+        pdf.text(split,14,28);
 
-      pdf.addPage("a4","portrait");
-      pdf.setFontSize(16); pdf.text("Kod Metni",14,18);
-      pdf.setFontSize(11);
-      const codeLines=task.code.map((line,i)=>`${i+1}. ${line}`);
-      pdf.text(codeLines,14,30);
-      pdf.setFontSize(10);
-      pdf.text("Not: Grid hücrelerindeki süreler yaklaşık dwell time değeridir. Webcam tabanlı gaze tracking araştırma amaçlı yaklaşık veri üretir.",14,270);
+        pdf.addPage("a4","portrait");
+        pdf.setFontSize(16); pdf.text("Kod Metni",14,18);
+        pdf.setFontSize(11);
+        const codeLines=task.code.map((line,i)=>`${i+1}. ${line}`);
+        pdf.text(codeLines,14,30);
+        pdf.setFontSize(10);
+        pdf.text("Not: Grid hücrelerindeki süreler yaklaşık dwell time değeridir. Webcam tabanlı gaze tracking araştırma amaçlı yaklaşık veri üretir.",14,270);
 
-      pdf.save(`${pid}_gaze_session_report.pdf`);
+        pdf.save(`${pid}_gaze_session_report.pdf`);
+      }catch(error){
+        console.error(error);
+        alert("PDF üretilirken hata oluştu. F12 > Console bölümündeki hatayı kontrol edin.");
+      }
     }
 
     function downloadAudio(){if(!audioBlob||!audioUrl){alert("Henüz indirilebilir ses kaydı yok.");return;} const pid=document.getElementById("participantId").value.trim()||"participant"; const link=document.createElement("a"); link.href=audioUrl; link.download=`${pid}_think_aloud_audio.webm`; link.click();}
