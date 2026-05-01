@@ -18,7 +18,7 @@
     input, select, textarea { padding: 9px; margin: 6px; border: 1px solid #aaa; border-radius: 6px; font-size: 15px; }
     #calibrationScreen { position: fixed; inset: 0; background: white; display: none; z-index: 9998; }
     .calibration-point { width: 28px; height: 28px; background: #d00000; border-radius: 50%; position: absolute; transform: translate(-50%, -50%); box-shadow: 0 0 0 10px rgba(208,0,0,0.15); }
-    #calibrationInstruction { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #222; color: white; padding: 12px 18px; border-radius: 8px; z-index: 9999; max-width: 720px; text-align: center; }
+    #calibrationInstruction { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #222; color: white; padding: 12px 18px; border-radius: 8px; z-index: 9999; max-width: 760px; text-align: center; }
     #calibrationCounter { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: #2d6cdf; color: white; padding: 10px 16px; border-radius: 8px; z-index: 9999; }
     #experimentArea { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 16px; min-height: 460px; }
     .aoi { border: 3px solid #444; border-radius: 10px; padding: 18px; background: #fff; position: relative; }
@@ -34,9 +34,9 @@
     th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
     th { background: #eeeeee; }
     .small { font-size: 13px; color: #555; }
+    .warning { color: #b3261e; font-weight: bold; }
     .task-nav { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .task-pill { background: #eee; color: #222; border-radius: 20px; padding: 6px 10px; font-size: 13px; }
-    .warning { color: #b3261e; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -66,7 +66,7 @@
       <button class="danger" onclick="resetData()">Veriyi Temizle</button>
 
       <p class="small">Not: Otomatik kalibrasyonda öğrenci kırmızı noktaya bakar; sistem tıklama istemeden kalibrasyon örneklerini alır. Ses kaydı için tarayıcı mikrofon izni isteyecektir.</p>
-      <p class="small warning">Veriler merkezi sunucuya gönderilmez. CSV ve ses dosyası bu bilgisayardan indirilir.</p>
+      <p class="small warning">Veriler merkezi sunucuya gönderilmez. CSV, ses ve metin dosyaları bu bilgisayardan indirilir.</p>
     </section>
 
     <section class="panel">
@@ -161,23 +161,20 @@
     let previousAOI = null;
     let previousGrid = null;
     let heatmapVisible = false;
+    let lastRecordedAt = 0;
 
     let mediaRecorder = null;
     let audioChunks = [];
     let audioBlob = null;
     let audioUrl = null;
-      transcriptText = "";
-      if (speechRecognition && isSpeechRecognitionRunning) {
-        speechRecognition.stop();
-      }
     let speechRecognition = null;
     let transcriptText = "";
     let isSpeechRecognitionRunning = false;
 
     const sampleIntervalMs = 100;
     const fixationDurationThresholdMs = 200;
-    const fixationRadiusPx = 60;
-    const calibrationSamplesPerPoint = 12;
+    const fixationRadiusPx = 90;
+    const calibrationSamplesPerPoint = 14;
     const calibrationSampleIntervalMs = 140;
 
     const calibrationPoints = [
@@ -188,6 +185,7 @@
 
     function initTasks() {
       const selector = document.getElementById("taskSelector");
+      if (!selector) return;
       selector.innerHTML = "";
       tasks.forEach((task, index) => {
         const opt = document.createElement("option");
@@ -199,7 +197,10 @@
       loadTask(0);
     }
 
-    function loadSelectedTask() { loadTask(parseInt(document.getElementById("taskSelector").value, 10)); }
+    function loadSelectedTask() {
+      const index = parseInt(document.getElementById("taskSelector").value, 10);
+      loadTask(index);
+    }
 
     function loadTask(index) {
       currentTaskIndex = index;
@@ -257,11 +258,9 @@
             dot.style.left = data.x + "px";
             dot.style.top = data.y + "px";
 
-          // Kayıt açıksa veriyi doğrudan WebGazer çıktısından kaydet.
-          // Böylece setInterval / latestGaze zamanlama sorunları engellenir.
-          if (isRecording) {
-            recordGazeSample();
-          }
+            if (isRecording) {
+              recordGazeSample(latestGaze);
+            }
           })
           .begin();
 
@@ -270,15 +269,13 @@
         webgazer.showFaceOverlay(true);
         webgazer.showFaceFeedbackBox(true);
 
-        if (typeof webgazer.resume === "function") {
-          webgazer.resume();
-        }
+        if (typeof webgazer.resume === "function") webgazer.resume();
 
-        setStatus("Kamera aktif. Lütfen yüz kutusu ve kırmızı gaze noktasının hareket ettiğini kontrol edin.");
+        setStatus("Kamera aktif. Yüz kutusu ve küçük kırmızı gaze noktasını kontrol edin; sonra otomatik kalibrasyon yapın.");
 
         setTimeout(() => {
           if (!latestGaze) {
-            setStatus("Kamera açık; ancak gaze koordinatı henüz gelmedi. Yüzünüz kutu içine girmeli, ışık yeterli olmalı ve Chrome kullanmalısınız.");
+            setStatus("Kamera açık; ancak gaze koordinatı henüz gelmedi. Yüzünüz kutu içine girmeli, ışık yeterli olmalı ve Chrome kullanılmalıdır.");
           }
         }, 5000);
       } catch (error) {
@@ -338,73 +335,6 @@
       }, 700);
     }
 
-    function startSpeechRecognition() {
-      transcriptText = "";
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-      if (!SpeechRecognition) {
-        document.getElementById("speechStatus").textContent = "Bu tarayıcı konuşmayı metne çevirmeyi desteklemiyor";
-        return;
-      }
-
-      speechRecognition = new SpeechRecognition();
-      speechRecognition.lang = "tr-TR";
-      speechRecognition.continuous = true;
-      speechRecognition.interimResults = true;
-
-      speechRecognition.onstart = () => {
-        isSpeechRecognitionRunning = true;
-        document.getElementById("speechStatus").textContent = "Konuşma metne çevriliyor";
-      };
-
-      speechRecognition.onresult = (event) => {
-        let interim = "";
-        let finalText = "";
-
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const text = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalText += text + " ";
-          } else {
-            interim += text + " ";
-          }
-        }
-
-        if (finalText.trim().length > 0) {
-          const now = new Date().toISOString();
-          transcriptText += `[${now}] ${finalText.trim()}
-`;
-        }
-
-        document.getElementById("speechStatus").textContent = interim.trim()
-          ? "Metne çevriliyor: " + interim.trim()
-          : "Konuşma metne çevriliyor";
-      };
-
-      speechRecognition.onerror = (event) => {
-        document.getElementById("speechStatus").textContent = "Konuşma tanıma hatası: " + event.error;
-      };
-
-      speechRecognition.onend = () => {
-        isSpeechRecognitionRunning = false;
-        document.getElementById("speechStatus").textContent = transcriptText.trim()
-          ? "Konuşma metni hazır"
-          : "Konuşma metni oluşmadı";
-      };
-
-      try {
-        speechRecognition.start();
-      } catch (error) {
-        document.getElementById("speechStatus").textContent = "Konuşma tanıma başlatılamadı";
-      }
-    }
-
-    function stopSpeechRecognition() {
-      if (speechRecognition && isSpeechRecognitionRunning) {
-        speechRecognition.stop();
-      }
-    }
-
     async function startAudioRecording() {
       audioChunks = [];
       audioBlob = null;
@@ -433,6 +363,64 @@
       if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.stop();
     }
 
+    function startSpeechRecognition() {
+      transcriptText = "";
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+      if (!SpeechRecognition) {
+        document.getElementById("speechStatus").textContent = "Bu tarayıcı konuşmayı metne çevirmeyi desteklemiyor";
+        return;
+      }
+
+      speechRecognition = new SpeechRecognition();
+      speechRecognition.lang = "tr-TR";
+      speechRecognition.continuous = true;
+      speechRecognition.interimResults = true;
+
+      speechRecognition.onstart = () => {
+        isSpeechRecognitionRunning = true;
+        document.getElementById("speechStatus").textContent = "Konuşma metne çevriliyor";
+      };
+
+      speechRecognition.onresult = (event) => {
+        let interim = "";
+        let finalText = "";
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const text = event.results[i][0].transcript;
+          if (event.results[i].isFinal) finalText += text + " ";
+          else interim += text + " ";
+        }
+
+        if (finalText.trim().length > 0) {
+          const now = new Date().toISOString();
+          transcriptText += `[${now}] ${finalText.trim()}\n`;
+        }
+
+        document.getElementById("speechStatus").textContent = interim.trim()
+          ? "Metne çevriliyor: " + interim.trim()
+          : "Konuşma metne çevriliyor";
+      };
+
+      speechRecognition.onerror = (event) => {
+        document.getElementById("speechStatus").textContent = "Konuşma tanıma hatası: " + event.error;
+      };
+
+      speechRecognition.onend = () => {
+        isSpeechRecognitionRunning = false;
+        document.getElementById("speechStatus").textContent = transcriptText.trim()
+          ? "Konuşma metni hazır"
+          : "Konuşma metni oluşmadı";
+      };
+
+      try { speechRecognition.start(); }
+      catch (error) { document.getElementById("speechStatus").textContent = "Konuşma tanıma başlatılamadı"; }
+    }
+
+    function stopSpeechRecognition() {
+      if (speechRecognition && isSpeechRecognitionRunning) speechRecognition.stop();
+    }
+
     async function startRecording() {
       const participantId = document.getElementById("participantId").value.trim();
       if (!participantId) { alert("Lütfen önce katılımcı kodunu giriniz."); return; }
@@ -441,30 +429,26 @@
       endTime = null;
       previousAOI = null;
       previousGrid = null;
+      lastRecordedAt = 0;
       setStatus("Gaze ve ses kaydı başladı. Öğrenciden problem çözümünü sesli yapmasını isteyiniz.");
       await startAudioRecording();
       startSpeechRecognition();
-
-      // WebGazer listener veriyi doğrudan kaydedebilir; buna ek olarak
-      // getCurrentPrediction ile düzenli yedek veri çekiyoruz.
-      recordingInterval = setInterval(recordGazeSample, sampleIntervalMs);
+      recordingInterval = setInterval(() => recordGazeSample(), sampleIntervalMs);
     }
 
-    async function recordGazeSample() {
+    async function recordGazeSample(gazeOverride = null) {
       if (!isRecording) return;
 
-      let gaze = latestGaze;
+      const nowMs = performance.now();
+      if (nowMs - lastRecordedAt < sampleIntervalMs * 0.8) return;
 
-      // Eğer listener henüz veri üretmediyse, WebGazer'dan doğrudan prediction iste.
+      let gaze = gazeOverride || latestGaze;
+
       if (!gaze && typeof webgazer !== "undefined" && typeof webgazer.getCurrentPrediction === "function") {
         try {
           const prediction = await webgazer.getCurrentPrediction();
           if (prediction && typeof prediction.x === "number" && typeof prediction.y === "number") {
-            gaze = {
-              x: prediction.x,
-              y: prediction.y,
-              elapsedTime: performance.now()
-            };
+            gaze = { x: prediction.x, y: prediction.y, elapsedTime: performance.now() };
             latestGaze = gaze;
           }
         } catch (e) {}
@@ -475,6 +459,7 @@
         return;
       }
 
+      lastRecordedAt = nowMs;
       const participantId = document.getElementById("participantId").value.trim();
       const task = tasks[currentTaskIndex];
       const taskName = task.title;
@@ -498,7 +483,7 @@
         atomType,
         timestamp: now.toISOString(),
         elapsedFromStartMs,
-        webgazerElapsedTime: Math.round(gaze.elapsedTime),
+        webgazerElapsedTime: Math.round(gaze.elapsedTime || performance.now()),
         x: Math.round(gaze.x),
         y: Math.round(gaze.y),
         aoi,
@@ -517,14 +502,13 @@
       isRecording = false;
       endTime = new Date();
       if (recordingInterval) clearInterval(recordingInterval);
+      recordingInterval = null;
       stopAudioRecording();
       stopSpeechRecognition();
       detectFixations(true);
       updateSummary();
-      setStatus("Kayıt durduruldu. CSV ve ses dosyalarını indirebilirsiniz.");
+      setStatus("Kayıt durduruldu. CSV, ses ve konuşma metni dosyalarını indirebilirsiniz.");
     }
-
-    function markStep() { stepCount++; updateSummary(); }
 
     document.addEventListener("click", function(e) {
       if (isRecording && !e.target.classList.contains("calibration-point")) stepCount++;
@@ -549,7 +533,7 @@
       return `R${row}C${col}`;
     }
 
-    function detectFixations(force=false) {
+    function detectFixations(force = false) {
       if (gazeData.length < 3) return;
       let cluster = [];
       for (let i = gazeData.length - 1; i >= 0; i--) {
@@ -716,11 +700,7 @@
     }
 
     function downloadTranscript() {
-      if (!transcriptText.trim()) {
-        alert("Henüz indirilebilir konuşma metni yok.");
-        return;
-      }
-
+      if (!transcriptText.trim()) { alert("Henüz indirilebilir konuşma metni yok."); return; }
       const participantId = document.getElementById("participantId").value.trim() || "participant";
       const task = tasks[currentTaskIndex];
       const content = [
@@ -731,8 +711,7 @@
         "",
         "SES METNİ:",
         transcriptText.trim()
-      ].join("
-");
+      ].join("\n");
 
       const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
@@ -753,9 +732,15 @@
       endTime = null;
       previousAOI = null;
       previousGrid = null;
+      latestGaze = null;
+      lastRecordedAt = 0;
       audioChunks = [];
       audioBlob = null;
       audioUrl = null;
+      transcriptText = "";
+      if (recordingInterval) clearInterval(recordingInterval);
+      recordingInterval = null;
+      if (speechRecognition && isSpeechRecognitionRunning) speechRecognition.stop();
       document.getElementById("audioStatus").textContent = "Hazır değil";
       document.getElementById("speechStatus").textContent = "Hazır değil";
       const canvas = document.getElementById("heatmapCanvas");
@@ -766,8 +751,18 @@
     }
 
     window.addEventListener("resize", setupHeatmapCanvas);
-    window.onload = initTasks;
-    window.onbeforeunload = function() { try { webgazer.end(); } catch (e) {} };
+    window.addEventListener("DOMContentLoaded", function () {
+      try {
+        initTasks();
+      } catch (error) {
+        console.error("Görevler yüklenemedi:", error);
+        alert("Görevler yüklenemedi. Lütfen F12 > Console bölümündeki kırmızı hatayı kontrol edin.");
+      }
+    });
+
+    window.onbeforeunload = function() {
+      try { webgazer.end(); } catch (e) {}
+    };
   </script>
 </body>
 </html>
