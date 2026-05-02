@@ -1,1 +1,744 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Python Kod Anlama - MediaPipe Webcam Gaze Tracking</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; background: #f5f5f5; color: #222; }
+    header { background: #222; color: white; padding: 14px 24px; font-size: 20px; font-weight: bold; }
+    main { padding: 24px; }
+    .panel { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); margin-bottom: 20px; }
+    button { padding: 10px 16px; margin: 6px; border: none; border-radius: 6px; background: #2d6cdf; color: white; cursor: pointer; font-size: 15px; }
+    button:hover { background: #174fa8; }
+    button:disabled { background: #b8b8b8; color: #eee; cursor: not-allowed; opacity: 0.65; }
+    button.secondary { background: #666; }
+    button.danger { background: #b3261e; }
+    button.success { background: #16803c; }
+    input, select, textarea { padding: 9px; margin: 6px; border: 1px solid #aaa; border-radius: 6px; font-size: 15px; }
+    #status { font-weight: bold; color: #2d6cdf; }
+    .small { font-size: 13px; color: #555; }
+    .warning { color: #b3261e; font-weight: bold; }
+    .task-nav { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .task-pill { background: #eee; color: #222; border-radius: 20px; padding: 6px 10px; font-size: 13px; }
+    #experimentArea { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 16px; min-height: 460px; }
+    .aoi { border: 3px solid #444; border-radius: 10px; padding: 18px; background: #fff; position: relative; }
+    .aoi-title { font-weight: bold; margin-bottom: 12px; color: #2d6cdf; }
+    pre { background: #f0f0f0; padding: 14px; border-radius: 8px; overflow: auto; font-size: 16px; line-height: 1.55; }
+    .code-line { display: grid; grid-template-columns: 38px 1fr; column-gap: 12px; font-family: Consolas, Monaco, monospace; }
+    .line-no { color: #777; text-align: right; user-select: none; border-right: 1px solid #ccc; padding-right: 8px; }
+    .line-code { white-space: pre; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background: #eeeeee; }
+
+    #videoBox { position: fixed; left: 12px; top: 60px; width: 250px; height: 190px; z-index: 9995; border: 3px solid #111; background: #000; overflow: hidden; }
+    #inputVideo { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+    #faceCanvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform: scaleX(-1); pointer-events: none; }
+    #gazeDot { position: fixed; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.88); border-radius: 50%; pointer-events: none; z-index: 10004; display: none; transform: translate(-50%, -50%); box-shadow: 0 0 0 7px rgba(255,0,0,0.16); }
+
+    #calibrationScreen { position: fixed; inset: 0; background: white; display: none; z-index: 9998; }
+    .calibration-point { width: 30px; height: 30px; background: #d00000; border-radius: 50%; position: absolute; transform: translate(-50%, -50%); box-shadow: 0 0 0 12px rgba(208,0,0,0.15); }
+    #calibrationInstruction { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #222; color: white; padding: 12px 18px; border-radius: 8px; z-index: 9999; max-width: 820px; text-align: center; }
+    #calibrationCounter { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: #2d6cdf; color: white; padding: 10px 16px; border-radius: 8px; z-index: 9999; }
+
+    #reviewOverlay { position: fixed; inset: 0; display: none; z-index: 10000; background: #ffffff; padding: 28px; box-sizing: border-box; }
+    #reviewHeader { height: 54px; display: flex; justify-content: space-between; align-items: center; font-weight: bold; font-size: 20px; }
+    #reviewTimer { background: #222; color: #fff; padding: 10px 18px; border-radius: 8px; font-size: 24px; }
+    #reviewCodeWrap { position: relative; height: calc(100vh - 112px); border: 3px solid #222; border-radius: 12px; background: #f7f7f7; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    #reviewCode { position: relative; margin: 0; padding: 28px; font-size: clamp(30px, 3vw, 48px); line-height: 1.85; overflow: visible; background: transparent; z-index: 1; max-width: 94%; }
+    #reviewVisualCanvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; display: none; }
+    #reviewCode .code-line { grid-template-columns: 72px 1fr; }
+    #instructionOverlay { position: fixed; inset: 0; display: none; z-index: 10002; background: #ffffff; color: #111; padding: 48px; box-sizing: border-box; align-items: center; justify-content: center; }
+    #instructionBox { max-width: 980px; border: 4px solid #222; border-radius: 18px; padding: 38px 46px; background: #f7f7f7; box-shadow: 0 6px 24px rgba(0,0,0,0.18); }
+    #instructionBox h2 { margin-top: 0; font-size: 30px; }
+    #instructionText { font-size: 24px; line-height: 1.55; }
+    #instructionCountdown { margin-top: 24px; font-weight: bold; font-size: 22px; color: #2d6cdf; }
+    #submitAnswerButton { background: #16803c; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <header>Python Kod Anlama, Sesli Düşünme ve Webcam Gaze Tracking Araştırması</header>
+
+  <div id="videoBox">
+    <video id="inputVideo" autoplay playsinline muted></video>
+    <canvas id="faceCanvas"></canvas>
+  </div>
+
+  <main>
+    <section class="panel">
+      <h2>Katılımcı ve Oturum Bilgileri</h2>
+      <label>Katılımcı Kodu:</label>
+      <input type="text" id="participantId" placeholder="Örn: P01" />
+      <label>Görev:</label>
+      <select id="taskSelector" onchange="loadSelectedTask()"></select>
+      <p id="status">Durum: Hazır</p>
+
+      <button id="startTrackerButton" onclick="startTracker()">1. Kamera ve Göz Takibini Başlat</button>
+      <button id="calibrationButton" onclick="startCalibration()">2. Otomatik Kalibrasyon</button>
+      <button id="startRecordingButton" onclick="startRecording()">3. Gaze + Ses Kaydını Başlat</button>
+      <button id="stopRecordingButton" class="secondary" onclick="stopRecording()">Kaydı Durdur</button>
+      <button id="previousTaskButton" onclick="previousTask()">Önceki Görev</button>
+      <button id="nextTaskButton" onclick="nextTask()">Sonraki Görev</button>
+      <button id="rawCsvButton" onclick="downloadRawCSV()">Ham Gaze CSV</button>
+      <button id="summaryCsvButton" onclick="downloadSummaryCSV()">Özet Analiz CSV</button>
+      <button id="scanPathCsvButton" onclick="downloadTransitionsCSV()">Scan Path CSV</button>
+      <button id="heatmapImageButton" onclick="downloadReviewImage()">Isı yayılım görseli</button>
+      <button id="pdfButton" onclick="downloadSessionPDF()">Oturum Raporu PDF İndir</button>
+      <button id="audioButton" onclick="downloadAudio()">Ses Kaydını İndir</button>
+      <button id="transcriptButton" onclick="downloadTranscript()">Ses Metnini İndir</button>
+      <button class="danger" onclick="resetData()">Veriyi Temizle</button>
+
+      <p class="small">Not: Isı haritası, scanpath çizgileri ve fixation noktaları öğrenci ekranda izlerken gösterilmez; 15 saniyelik tam ekran kod inceleme oturumu bittikten sonra rapor görseline ve PDF’ye eklenir.</p>
+      <p class="small warning">Veriler merkezi sunucuya gönderilmez. CSV, görsel, ses ve metin dosyaları bu bilgisayardan indirilir.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Görev Ekranı</h2>
+      <div class="task-nav">
+        <span class="task-pill" id="taskInfo">Görev 1 / 12</span>
+        <span class="task-pill" id="atomInfo">Kod örüntüsü</span>
+      </div>
+      <p><strong>Yönerge:</strong> Lütfen kodu çalıştırmadan okuyunuz. Kodun ekrana hangi çıktıyı vereceğini tahmin ediniz. Düşünme sürecinizi yüksek sesle açıklayınız.</p>
+
+      <div id="experimentArea">
+        <div class="aoi" data-aoi="Kod Alanı">
+          <div class="aoi-title">AOI 1: Kod Alanı</div>
+          <pre id="codeBlock"></pre>
+        </div>
+
+        <div>
+          <div class="aoi" data-aoi="Soru Yönergesi" style="margin-bottom:16px;">
+            <div class="aoi-title">AOI 2: Soru Yönergesi</div>
+            <p id="taskPrompt">Bu Python kodunun çıktısı ne olur?</p>
+            <p class="small">Öğrenciden özellikle satır numaralarını kullanarak açıklama yapması istenir.</p>
+          </div>
+
+          <div class="aoi" data-aoi="Cevap Alanı">
+            <div class="aoi-title">AOI 3: Cevap Alanı</div>
+            <label>Tahmin edilen çıktı:</label>
+            <textarea id="answer" style="width:100%; height:120px;" placeholder="Öğrenci çıktıyı buraya yazar..."></textarea>
+            <button id="submitAnswerButton" onclick="submitAnswer()">Gönder</button>
+            <p class="small" id="answerSubmitStatus">Çıktı tahmini gönderilmeden rapor ve veri indirme butonları aktif olmayacaktır.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Canlı Veri Özeti</h2>
+      <p>15 sn inceleme gaze kayıt sayısı: <span id="recordCount">0</span></p>
+      <p>Task completion time: <span id="completionTime">0</span> sn</p>
+      <p>Step count: <span id="stepCount">0</span></p>
+      <p>Total fixation/focus count: <span id="fixationCount">0</span></p>
+      <p>Kalibrasyon durumu: <span id="calibrationStatus">Hazır değil</span></p>
+      <p>İnceleme modu: <span id="reviewStatus">Hazır değil</span></p>
+      <p>Ses kaydı durumu: <span id="audioStatus">Hazır değil</span></p>
+      <p>Konuşma metni durumu: <span id="speechStatus">Hazır değil</span></p>
+      <table>
+        <thead>
+          <tr><th>AOI</th><th>Gaze Count</th><th>Dwell Time Approx. ms</th><th>Fixation Count</th></tr>
+        </thead>
+        <tbody id="aoiSummary"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <div id="gazeDot"></div>
+
+  <div id="calibrationScreen">
+    <div id="calibrationInstruction">Kırmızı nokta göründüğünde başınızı oynatmadan yalnızca gözünüzle noktaya bakınız. Nokta kendiliğinden bir sonraki konuma geçecektir.</div>
+    <div id="calibrationCounter">Kalibrasyon başlıyor...</div>
+  </div>
+
+  <div id="instructionOverlay">
+    <div id="instructionBox">
+      <h2 id="instructionTitle">Yönerge</h2>
+      <div id="instructionText"></div>
+      <div id="instructionCountdown"></div>
+    </div>
+  </div>
+
+  <div id="reviewOverlay">
+    <div id="reviewHeader">
+      <div id="reviewTitle">15 sn Kod İnceleme Modu</div>
+      <div id="reviewTimer">15</div>
+    </div>
+    <div id="reviewCodeWrap" class="aoi" data-aoi="Kod Alanı">
+      <pre id="reviewCode"></pre>
+      <canvas id="reviewVisualCanvas"></canvas>
+    </div>
+  </div>
+
+  <script>
+    const tasks = [
+      { title: "Görev 1 - Atama ve Güncelleme", atom: "Assignment / Variable Update", prompt: "Aşağıdaki Python kodunun çıktısı ne olur? Satır numaralarını kullanarak sesli açıklayınız.", code: ["x = 4", "y = x", "x = x + 3", "print(x, y)"] },
+      { title: "Görev 2 - Koşullu İfade", atom: "Conditional Expression", prompt: "Koşullu ifadeyi takip ederek çıktıyı tahmin ediniz.", code: ["score = 65", "result = 'pass' if score >= 60 else 'fail'", "print(result)"] },
+      { title: "Görev 3 - Mantıksal Kısa Devre", atom: "Logic as Control Flow / Short-Circuit", prompt: "and ifadesinin ikinci kısmının çalışıp çalışmayacağını düşünerek çıktıyı tahmin ediniz.", code: ["x = 0", "y = 5", "result = x != 0 and y / x > 1", "print(result)"] },
+      { title: "Görev 4 - Zincirli Karşılaştırma", atom: "Implicit Predicate / Chained Comparison", prompt: "Python’daki zincirli karşılaştırma yapısını dikkate alarak çıktıyı tahmin ediniz.", code: ["a = 3", "b = 5", "c = 4", "print(a < b > c)"] },
+      { title: "Görev 5 - Liste İndeksi", atom: "Indexing / Off-by-One Risk", prompt: "Liste indekslerini takip ederek çıktıyı tahmin ediniz.", code: ["numbers = [10, 20, 30, 40]", "i = 2", "print(numbers[i])"] },
+      { title: "Görev 6 - Negatif İndeks", atom: "Negative Indexing", prompt: "Negatif indeksin hangi elemana karşılık geldiğini açıklayarak çıktıyı tahmin ediniz.", code: ["letters = ['a', 'b', 'c', 'd']", "print(letters[-1])", "print(letters[-3])"] },
+      { title: "Görev 7 - Dilimleme", atom: "Slicing", prompt: "Dilimlemenin başlangıç ve bitiş indekslerini takip ederek çıktıyı tahmin ediniz.", code: ["text = 'PYTHON'", "part = text[1:4]", "print(part)"] },
+      { title: "Görev 8 - Döngüde Biriktirme", atom: "Loop Accumulation", prompt: "Her döngü adımında total değişkeninin nasıl değiştiğini sesli açıklayınız.", code: ["total = 0", "for i in range(1, 4):", "    total = total + i", "print(total)"] },
+      { title: "Görev 9 - İç İçe Koşul", atom: "Nested Condition", prompt: "Girintileri ve koşul akışını takip ederek çıktıyı tahmin ediniz.", code: ["x = 7", "if x > 5:", "    if x % 2 == 0:", "        print('A')", "    else:", "        print('B')", "else:", "    print('C')"] },
+      { title: "Görev 10 - Fonksiyon ve Dönüş Değeri", atom: "Function Return", prompt: "Fonksiyonun hangi değeri döndürdüğünü takip ederek çıktıyı tahmin ediniz.", code: ["def add_one(n):", "    n = n + 1", "    return n", "x = 4", "y = add_one(x)", "print(x, y)"] },
+      { title: "Görev 11 - Liste Referansı", atom: "Aliasing / Reference", prompt: "a ve b listelerinin aynı nesneyi gösterip göstermediğini düşünerek çıktıyı tahmin ediniz.", code: ["a = [1, 2]", "b = a", "b.append(3)", "print(a)"] },
+      { title: "Görev 12 - Varsayılan Parametre", atom: "Default Mutable Argument", prompt: "Fonksiyon iki kez çağrıldığında liste içeriğinin nasıl değiştiğini sesli açıklayınız.", code: ["def add_item(x, items=[]):", "    items.append(x)", "    return items", "print(add_item(1))", "print(add_item(2))"] }
+    ];
+
+    let currentTaskIndex = 0, isTrackerRunning = false, isCalibrated = false, isRecording = false, isReviewMode = false;
+    let currentFeature = null, lastGaze = null, lastRecordedAt = 0, camera = null, faceMesh = null;
+    let modelX = null, modelY = null, calibrationSamples = [], calibrationIndex = 0;
+    let gazeData = [], fixationData = [], transitions = [], reviewGaze = [], reviewFixations = [];
+    let lastReviewImageDataUrl = null;
+    let isAnswerSubmitted = false, submittedAnswerText = "";
+    let reviewTimerId = null, instructionTimerId = null;
+    let reviewWrapSnapshot = { width: 1200, height: 720 };
+    let startTime = null, endTime = null, stepCount = 0, previousAOI = null, previousGrid = null;
+    let mediaRecorder = null, audioChunks = [], audioBlob = null, audioUrl = null;
+    let speechRecognition = null, transcriptText = "", isSpeechRecognitionRunning = false;
+
+    const sampleIntervalMs = 80;
+    const smoothingAlpha = 0.35;
+    const fixationDurationThresholdMs = 220;
+    const fixationRadiusPx = 75;
+    const calibrationSamplesPerPoint = 65;
+    const reviewDurationSec = 15;
+    const calibrationPoints = [[10,10],[50,10],[90,10],[10,50],[50,50],[90,50],[10,90],[50,90],[90,90]];
+
+    function initTasks() {
+      const selector = document.getElementById("taskSelector"); selector.innerHTML = "";
+      tasks.forEach((task, index) => { const opt = document.createElement("option"); opt.value = index; opt.textContent = `${index + 1}. ${task.title}`; selector.appendChild(opt); });
+      loadTask(0);
+    }
+    function setStatus(message) { document.getElementById("status").textContent = "Durum: " + message; }
+    function loadSelectedTask() { loadTask(parseInt(document.getElementById("taskSelector").value, 10)); }
+    function previousTask() { if (currentTaskIndex > 0) loadTask(currentTaskIndex - 1); }
+    function nextTask() { if (currentTaskIndex < tasks.length - 1) loadTask(currentTaskIndex + 1); }
+    function loadTask(index) {
+      currentTaskIndex = index; const task = tasks[index];
+      document.getElementById("taskSelector").value = index;
+      document.getElementById("taskInfo").textContent = `Görev ${index + 1} / ${tasks.length}`;
+      document.getElementById("atomInfo").textContent = task.atom;
+      document.getElementById("taskPrompt").textContent = task.prompt;
+      document.getElementById("answer").value = "";
+      submittedAnswerText = "";
+      isAnswerSubmitted = false;
+      setDownloadButtonsEnabled(false);
+      const statusEl = document.getElementById("answerSubmitStatus"); if(statusEl) statusEl.textContent = "Çıktı tahmini gönderilmeden rapor ve veri indirme butonları aktif olmayacaktır.";
+      const submitBtn = document.getElementById("submitAnswerButton"); if(submitBtn) submitBtn.disabled = false;
+      const startBtn = document.getElementById("startRecordingButton"); if(startBtn) startBtn.disabled = false;
+      renderCode(document.getElementById("codeBlock"), task.code); setStatus(`${task.title} yüklendi.`);
+    }
+    function renderCode(container, lines) {
+      container.innerHTML = "";
+      lines.forEach((line, index) => { const row = document.createElement("div"); row.className = "code-line"; const no = document.createElement("span"); no.className = "line-no"; no.textContent = index + 1; const code = document.createElement("span"); code.className = "line-code"; code.textContent = line || " "; row.appendChild(no); row.appendChild(code); container.appendChild(row); });
+    }
+
+    async function startTracker() {
+      setStatus("MediaPipe kamera ve yüz/iris algılama başlatılıyor...");
+      const video = document.getElementById("inputVideo"); const canvas = document.getElementById("faceCanvas"); const ctx = canvas.getContext("2d");
+      try {
+        faceMesh = new FaceMesh({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
+        faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+        faceMesh.onResults(results => {
+          canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; ctx.clearRect(0,0,canvas.width,canvas.height);
+          if (!results.multiFaceLandmarks || results.multiFaceLandmarks.length === 0) { currentFeature = null; return; }
+          const lm = results.multiFaceLandmarks[0]; drawSimpleFace(ctx, lm, canvas.width, canvas.height); currentFeature = extractGazeFeature(lm);
+          if (isCalibrated && modelX && modelY && currentFeature) {
+            const rawX = clamp(predict(modelX, currentFeature), 0, window.innerWidth);
+            const rawY = clamp(predict(modelY, currentFeature), 0, window.innerHeight);
+            updateGazePoint(rawX, rawY);
+          }
+        });
+        camera = new Camera(video, { onFrame: async () => { await faceMesh.send({ image: video }); }, width: 640, height: 480 });
+        await camera.start(); isTrackerRunning = true; setStatus("Kamera aktif. Yüz ve iris noktaları algılanınca otomatik kalibrasyon yapınız.");
+      } catch (error) { console.error(error); alert("Kamera/MediaPipe başlatılamadı. Chrome, HTTPS ve kamera izinlerini kontrol edin."); setStatus("Kamera/MediaPipe başlatılamadı."); }
+    }
+    function drawSimpleFace(ctx, lm, w, h) { const pts=[33,133,362,263,468,473]; ctx.fillStyle="rgba(0,255,0,0.9)"; pts.forEach(i=>{const p=lm[i]; if(!p)return; ctx.beginPath(); ctx.arc(p.x*w,p.y*h,3,0,Math.PI*2); ctx.fill();}); const xs=lm.map(p=>p.x*w), ys=lm.map(p=>p.y*h); ctx.strokeStyle="rgba(0,255,0,0.9)"; ctx.lineWidth=2; ctx.strokeRect(Math.min(...xs),Math.min(...ys),Math.max(...xs)-Math.min(...xs),Math.max(...ys)-Math.min(...ys)); }
+    function extractGazeFeature(lm) {
+      const lo=lm[33], li=lm[133], ri=lm[362], ro=lm[263], lir=lm[468], rir=lm[473], nose=lm[1], fl=lm[234], fr=lm[454], chin=lm[152], fore=lm[10];
+      if(!lo||!li||!ri||!ro||!lir||!rir||!nose||!fl||!fr) return null;
+      const lew=dist(lo,li)||.001, rew=dist(ri,ro)||.001, fw=dist(fl,fr)||.001, fh=fore&&chin?dist(fore,chin)||.001:fw;
+      const lec=midpoint(lo,li), rec=midpoint(ri,ro), ec=midpoint(lec,rec);
+      const lx=(lir.x-lec.x)/lew, ly=(lir.y-lec.y)/lew, rx=(rir.x-rec.x)/rew, ry=(rir.y-rec.y)/rew, nx=(nose.x-ec.x)/fw, ny=(nose.y-ec.y)/fh;
+      return [1,lx,ly,rx,ry,nx,ny,lx*lx,rx*rx,ly*ly,ry*ry,lx*rx,ly*ry];
+    }
+    function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);} function midpoint(a,b){return{x:(a.x+b.x)/2,y:(a.y+b.y)/2};} function clamp(v,min,max){return Math.max(min,Math.min(max,v));}
+
+    function startCalibration() {
+      if(!isTrackerRunning){alert("Önce kamera ve göz takibini başlatınız.");return;} if(!currentFeature){alert("Yüz/iris algılanmadı. Işığı artırın ve kameraya düz bakın.");return;}
+      calibrationSamples=[]; calibrationIndex=0; isCalibrated=false; modelX=null; modelY=null; lastGaze=null; document.getElementById("calibrationStatus").textContent="Kalibrasyon yapılıyor"; document.getElementById("calibrationScreen").style.display="block"; showCalibrationPoint();
+    }
+    function showCalibrationPoint(){
+      const screen=document.getElementById("calibrationScreen"); const old=document.querySelector(".calibration-point"); if(old) old.remove();
+      if(calibrationIndex>=calibrationPoints.length){screen.style.display="none"; fitCalibrationModel(); return;}
+      const [xp,yp]=calibrationPoints[calibrationIndex], tx=window.innerWidth*xp/100, ty=window.innerHeight*yp/100;
+      const point=document.createElement("div"); point.className="calibration-point"; point.style.left=xp+"%"; point.style.top=yp+"%"; screen.appendChild(point);
+      const counter=document.getElementById("calibrationCounter"); counter.textContent=`Nokta ${calibrationIndex+1} / ${calibrationPoints.length}: Kırmızı noktaya bakınız.`;
+      let count=0; setTimeout(()=>{ const timer=setInterval(()=>{ if(currentFeature){calibrationSamples.push({features:[...currentFeature],x:tx,y:ty}); count++; counter.textContent=`Nokta ${calibrationIndex+1} / ${calibrationPoints.length}: Örnek ${count} / ${calibrationSamplesPerPoint}`;} if(count>=calibrationSamplesPerPoint){clearInterval(timer); calibrationIndex++; setTimeout(showCalibrationPoint,250);} },45); },650);
+    }
+    function fitCalibrationModel(){
+      if(calibrationSamples.length<80){alert("Yeterli kalibrasyon verisi alınamadı."); document.getElementById("calibrationStatus").textContent="Başarısız"; return;}
+      const X=calibrationSamples.map(s=>s.features), yx=calibrationSamples.map(s=>s.x), yy=calibrationSamples.map(s=>s.y); modelX=linearRegression(X,yx); modelY=linearRegression(X,yy); isCalibrated=true; document.getElementById("calibrationStatus").textContent=`Tamamlandı (${calibrationSamples.length} örnek)`; setStatus("Kalibrasyon tamamlandı. Kalibrasyon tamamlandı. Şimdi kayıt ve 15 sn inceleme modunu başlatabilirsiniz.");
+    }
+    function linearRegression(X,y){const n=X.length,p=X[0].length,XtX=Array.from({length:p},()=>Array(p).fill(0)),Xty=Array(p).fill(0),lambda=.01; for(let i=0;i<n;i++){for(let a=0;a<p;a++){Xty[a]+=X[i][a]*y[i]; for(let b=0;b<p;b++) XtX[a][b]+=X[i][a]*X[i][b];}} for(let i=0;i<p;i++) XtX[i][i]+=lambda; return solveLinearSystem(XtX,Xty);} 
+    function solveLinearSystem(A,b){const n=b.length,M=A.map((r,i)=>[...r,b[i]]); for(let i=0;i<n;i++){let mr=i; for(let k=i+1;k<n;k++) if(Math.abs(M[k][i])>Math.abs(M[mr][i])) mr=k; [M[i],M[mr]]=[M[mr],M[i]]; const piv=M[i][i]||1e-9; for(let j=i;j<=n;j++) M[i][j]/=piv; for(let k=0;k<n;k++){if(k===i)continue; const f=M[k][i]; for(let j=i;j<=n;j++) M[k][j]-=f*M[i][j];}} return M.map(r=>r[n]);}
+    function predict(w,f){return w.reduce((s,v,i)=>s+v*f[i],0);}
+
+    function updateGazePoint(x,y){
+      if(lastGaze){x=lastGaze.x*smoothingAlpha+x*(1-smoothingAlpha); y=lastGaze.y*smoothingAlpha+y*(1-smoothingAlpha);} lastGaze={x,y,elapsedTime:performance.now()};
+      const dot=document.getElementById("gazeDot"); dot.style.display="none";
+      if(isRecording && isReviewMode) recordGazeSample(lastGaze);
+    }
+
+    function setDownloadButtonsEnabled(enabled){
+      ["previousTaskButton","nextTaskButton","rawCsvButton","summaryCsvButton","scanPathCsvButton","heatmapImageButton","pdfButton","audioButton","transcriptButton"].forEach(id=>{
+        const el=document.getElementById(id); if(el) el.disabled=!enabled;
+      });
+      const selector=document.getElementById("taskSelector"); if(selector) selector.disabled=!enabled;
+    }
+
+    function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
+
+    async function showInstructionOverlay(title, text, seconds=10){
+      const overlay=document.getElementById("instructionOverlay");
+      const titleEl=document.getElementById("instructionTitle");
+      const textEl=document.getElementById("instructionText");
+      const counter=document.getElementById("instructionCountdown");
+      titleEl.textContent=title;
+      textEl.textContent=text;
+      overlay.style.display="flex";
+      let remaining=seconds;
+      counter.textContent=`${remaining} sn sonra devam edilecektir.`;
+      if(instructionTimerId) clearInterval(instructionTimerId);
+      await new Promise(resolve=>{
+        instructionTimerId=setInterval(()=>{
+          remaining--;
+          counter.textContent=remaining>0 ? `${remaining} sn sonra devam edilecektir.` : "Devam ediliyor...";
+          if(remaining<=0){ clearInterval(instructionTimerId); instructionTimerId=null; resolve(); }
+        },1000);
+      });
+      overlay.style.display="none";
+    }
+
+    async function startRecording(){
+      const pid=document.getElementById("participantId").value.trim();
+      if(!pid){alert("Lütfen önce katılımcı kodunu giriniz.");return;}
+      if(!isCalibrated){alert("Lütfen önce otomatik kalibrasyonu tamamlayınız.");return;}
+      isAnswerSubmitted=false;
+      submittedAnswerText="";
+      document.getElementById("answer").value="";
+      const submitBtn=document.getElementById("submitAnswerButton"); if(submitBtn) submitBtn.disabled=true;
+      setDownloadButtonsEnabled(false);
+      document.getElementById("startRecordingButton").disabled=true;
+      setStatus("Başlangıç yönergesi gösteriliyor. Ardından 15 sn otomatik kod inceleme başlayacaktır.");
+
+      await showInstructionOverlay(
+        "Kod İnceleme Yönergesi",
+        "Karşınıza tam ekran olarak kod satırları gelecektir. Kod satırlarını incelemek ve çıktıyı tahmin etmek için 15 sn süreniz bulunmaktadır. İnceleme sürecinde, göz takibiniz analiz edileceğinden, ekranda kod satırlarının bulunduğu alana odaklı olarak incelemenizi yapınız. Ek olarak, ses kaydınız da alınarak problem çözme süreciniz incelenecektir. Analiz sürecinizdeki tüm düşüncelerinizi sesli olarak ifade etmeniz çalışma verimliliği için çok önemli olacaktır. Kod satırlarının kenarlarında bulunan satır numaralarını analizlerinizde hedef belirlemek için kullanabilirsiniz.",
+        10
+      );
+
+      await startAudioRecording();
+      startSpeechRecognition();
+      startCodeReviewMode();
+    }
+
+    function startCodeReviewMode(){
+      if(!isCalibrated){alert("Önce kalibrasyon yapınız."); return;}
+      const task=tasks[currentTaskIndex];
+      reviewGaze=[]; reviewFixations=[]; gazeData=[]; fixationData=[]; transitions=[]; lastReviewImageDataUrl=null;
+      isReviewMode=true; isRecording=true; lastRecordedAt=0; startTime=new Date(); endTime=null; previousAOI=null; previousGrid=null; stepCount=0;
+      document.getElementById("reviewOverlay").style.display="block";
+      document.getElementById("reviewTitle").textContent=`${task.title} - 15 sn Kod İnceleme`;
+      renderCode(document.getElementById("reviewCode"), task.code);
+      resizeReviewCanvas();
+      clearReviewCanvas();
+      document.getElementById("reviewStatus").textContent="İnceleme sürüyor";
+      let remaining=reviewDurationSec;
+      document.getElementById("reviewTimer").textContent=remaining;
+      if(reviewTimerId) clearInterval(reviewTimerId);
+      reviewTimerId=setInterval(()=>{
+        remaining--;
+        document.getElementById("reviewTimer").textContent=remaining;
+        if(remaining<=0){
+          clearInterval(reviewTimerId);
+          reviewTimerId=null;
+          finishReviewMode();
+        }
+      },1000);
+    }
+
+    async function finishReviewMode(){
+      isReviewMode=false;
+      isRecording=false;
+      endTime=new Date();
+      document.getElementById("reviewOverlay").style.display="none";
+      document.getElementById("reviewStatus").textContent="İnceleme tamamlandı";
+      finalizeReviewVisual();
+      updateSummary();
+      const submitBtn=document.getElementById("submitAnswerButton"); if(submitBtn) submitBtn.disabled=false;
+      setStatus("15 sn kod inceleme tamamlandı. Lütfen AOI 3: Cevap Alanı bölümüne çıktı tahmininizi yazıp Gönder butonuna tıklayınız.");
+      await showInstructionOverlay(
+        "Çıktı Tahmini ve Rapor İndirme",
+        "Ekranın sağ alt bölümünde bulunan \"AOI 3: Cevap Alanı\" na çıktı tahmininizi yazarak gönder butonuna tıklayınız. Oturum raporunu ve oturumun diğer çıktılarını aktif olan butonlar ile indirmenizin ardından sonraki kod alanına geçebilirsiniz. Katkılarınız için teşekkür ederiz.",
+        10
+      );
+    }
+    function resizeReviewCanvas(){
+      const wrap=document.getElementById("reviewCodeWrap"), c=document.getElementById("reviewVisualCanvas");
+      c.width=wrap.clientWidth;
+      c.height=wrap.clientHeight;
+      reviewWrapSnapshot = { width: Math.max(1, wrap.clientWidth), height: Math.max(1, wrap.clientHeight) };
+    }
+    function clearReviewCanvas(){const c=document.getElementById("reviewVisualCanvas"), ctx=c.getContext("2d"); ctx.clearRect(0,0,c.width,c.height);}
+    function recordGazeSample(gaze){
+      if(!isRecording||!gaze)return; const nowMs=performance.now(); if(nowMs-lastRecordedAt<sampleIntervalMs)return; lastRecordedAt=nowMs;
+      const pid=document.getElementById("participantId").value.trim(), task=tasks[currentTaskIndex], aoi=detectAOI(gaze.x,gaze.y), grid=detectGrid7x7(gaze.x,gaze.y), now=new Date(), elapsedFromStartMs=startTime?now-startTime:0;
+      if(previousAOI&&previousAOI!==aoi) transitions.push({participantId:pid,taskName:task.title,atomType:task.atom,timestamp:now.toISOString(),fromAOI:previousAOI,toAOI:aoi,fromGrid:previousGrid,toGrid:grid}); previousAOI=aoi; previousGrid=grid;
+      gazeData.push({participantId:pid,taskNo:currentTaskIndex+1,taskName:task.title,atomType:task.atom,timestamp:now.toISOString(),elapsedFromStartMs,x:Math.round(gaze.x),y:Math.round(gaze.y),aoi,grid7x7:grid,stepCount,answerText:document.getElementById("answer").value.replace(/\n/g," "),observerNote:""});
+      if(isReviewMode) recordReviewGaze(gaze); detectFixations(); updateSummary();
+    }
+    function recordReviewGaze(gaze){
+      const wrap=document.getElementById("reviewCodeWrap"), r=wrap.getBoundingClientRect();
+      if(gaze.x<r.left||gaze.x>r.right||gaze.y<r.top||gaze.y>r.bottom)return;
+      const lx=gaze.x-r.left, ly=gaze.y-r.top;
+      reviewGaze.push({
+        x:lx,
+        y:ly,
+        nx:lx/Math.max(1,r.width),
+        ny:ly/Math.max(1,r.height),
+        t:performance.now()
+      });
+    }
+    function drawReviewHeatPoint(x,y){
+      // Öğrenci inceleme sırasında görsel katmanları görmeyecek. Bu fonksiyon bilinçli olarak boş bırakıldı.
+    }
+    function drawReviewPathLive(){
+      // Öğrenci inceleme sırasında scanpath görmeyecek. Görseller oturum bitince üretilecek.
+    }
+    function finalizeReviewVisual(){
+      computeReviewFixations();
+      lastReviewImageDataUrl = buildReviewReportImageDataUrl();
+    }
+    function computeReviewFixations(){reviewFixations=[]; if(reviewGaze.length<3)return; let cluster=[]; for(const p of reviewGaze){if(cluster.length===0){cluster.push(p);continue;} const cx=cluster.reduce((s,d)=>s+d.x,0)/cluster.length, cy=cluster.reduce((s,d)=>s+d.y,0)/cluster.length; if(Math.hypot(p.x-cx,p.y-cy)<=fixationRadiusPx){cluster.push(p);} else {pushReviewFixation(cluster); cluster=[p];}} pushReviewFixation(cluster);}
+    function pushReviewFixation(cluster){if(cluster.length<3)return; const duration=cluster[cluster.length-1].t-cluster[0].t; if(duration>=fixationDurationThresholdMs){reviewFixations.push({x:cluster.reduce((s,d)=>s+d.x,0)/cluster.length,y:cluster.reduce((s,d)=>s+d.y,0)/cluster.length,duration});}}
+
+    function submitAnswer(){
+      const answerEl=document.getElementById("answer");
+      const answer=(answerEl.value||"").trim();
+      if(!answer){ alert("Lütfen çıktı tahmininizi yazınız."); return; }
+      submittedAnswerText=answer;
+      isAnswerSubmitted=true;
+      gazeData.forEach(row=>{ row.answerText=answer.replace(/\n/g," "); });
+      stopAudioRecording();
+      stopSpeechRecognition();
+      setDownloadButtonsEnabled(true);
+      const submitBtn=document.getElementById("submitAnswerButton"); if(submitBtn) submitBtn.disabled=true;
+      const statusEl=document.getElementById("answerSubmitStatus"); if(statusEl) statusEl.textContent="Çıktı tahmini gönderildi. Rapor ve veri indirme butonları aktif edildi.";
+      setStatus("Çıktı tahmini gönderildi. Oturum çıktıları indirilebilir; ardından sonraki göreve geçebilirsiniz.");
+    }
+
+    function stopRecording(){isRecording=false; isReviewMode=false; endTime=new Date(); if(reviewTimerId){clearInterval(reviewTimerId); reviewTimerId=null;} document.getElementById("reviewOverlay").style.display="none"; stopAudioRecording(); stopSpeechRecognition(); detectFixations(); updateSummary(); setStatus("Ses kaydı durduruldu. CSV, görsel, ses ve konuşma metni dosyalarını indirebilirsiniz.");}
+
+    async function startAudioRecording(){audioChunks=[]; audioBlob=null; audioUrl=null; try{const stream=await navigator.mediaDevices.getUserMedia({audio:true}); mediaRecorder=new MediaRecorder(stream); mediaRecorder.ondataavailable=e=>{if(e.data.size>0)audioChunks.push(e.data);}; mediaRecorder.onstop=()=>{audioBlob=new Blob(audioChunks,{type:"audio/webm"}); audioUrl=URL.createObjectURL(audioBlob); document.getElementById("audioStatus").textContent="Ses kaydı hazır"; stream.getTracks().forEach(t=>t.stop());}; mediaRecorder.start(); document.getElementById("audioStatus").textContent="Ses kaydı alınıyor";}catch(e){document.getElementById("audioStatus").textContent="Mikrofon izni alınamadı";}}
+    function stopAudioRecording(){if(mediaRecorder&&mediaRecorder.state==="recording")mediaRecorder.stop();}
+    function startSpeechRecognition(){transcriptText=""; const SR=window.SpeechRecognition||window.webkitSpeechRecognition; if(!SR){document.getElementById("speechStatus").textContent="Bu tarayıcı konuşmayı metne çevirmeyi desteklemiyor";return;} speechRecognition=new SR(); speechRecognition.lang="tr-TR"; speechRecognition.continuous=true; speechRecognition.interimResults=true; speechRecognition.onstart=()=>{isSpeechRecognitionRunning=true; document.getElementById("speechStatus").textContent="Konuşma metne çevriliyor";}; speechRecognition.onresult=e=>{let interim="", finalText=""; for(let i=e.resultIndex;i<e.results.length;i++){const text=e.results[i][0].transcript; if(e.results[i].isFinal)finalText+=text+" "; else interim+=text+" ";} if(finalText.trim()) transcriptText+=`[${new Date().toISOString()}] ${finalText.trim()}\n`; document.getElementById("speechStatus").textContent=interim.trim()?"Metne çevriliyor: "+interim.trim():"Konuşma metne çevriliyor";}; speechRecognition.onerror=e=>{document.getElementById("speechStatus").textContent="Konuşma tanıma hatası: "+e.error;}; speechRecognition.onend=()=>{isSpeechRecognitionRunning=false; document.getElementById("speechStatus").textContent=transcriptText.trim()?"Konuşma metni hazır":"Konuşma metni oluşmadı";}; try{speechRecognition.start();}catch(e){}}
+    function stopSpeechRecognition(){if(speechRecognition&&isSpeechRecognitionRunning)speechRecognition.stop();}
+
+    document.addEventListener("click",e=>{if(isRecording&&!e.target.classList.contains("calibration-point"))stepCount++;}); document.addEventListener("keydown",()=>{if(isRecording)stepCount++;});
+    function detectAOI(x,y){if(isReviewMode){const r=document.getElementById("reviewCodeWrap").getBoundingClientRect(); if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return"Kod Alanı"; return"Kod Alanı Dışı";} const areas=document.querySelectorAll(".aoi"); for(const area of areas){const r=area.getBoundingClientRect(); if(x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom)return area.dataset.aoi;} return"AOI Dışı";}
+    function detectGrid7x7(x,y){const col=Math.min(7,Math.max(1,Math.floor(x/(window.innerWidth/7))+1)), row=Math.min(7,Math.max(1,Math.floor(y/(window.innerHeight/7))+1)); return`R${row}C${col}`;}
+    function detectFixations(){if(gazeData.length<3)return; let cluster=[]; for(let i=gazeData.length-1;i>=0;i--){const p=gazeData[i]; if(cluster.length===0){cluster.push(p);continue;} const cx=cluster.reduce((s,d)=>s+d.x,0)/cluster.length, cy=cluster.reduce((s,d)=>s+d.y,0)/cluster.length; if(Math.hypot(p.x-cx,p.y-cy)<=fixationRadiusPx)cluster.push(p); else break;} const duration=cluster.length*sampleIntervalMs; if(duration>=fixationDurationThresholdMs){const last=cluster[0], key=`${last.participantId}_${last.taskNo}_${last.aoi}_${Math.round(last.elapsedFromStartMs/fixationDurationThresholdMs)}`; if(!fixationData.some(f=>f.fixationKey===key)){fixationData.push({fixationKey:key,participantId:last.participantId,taskNo:last.taskNo,taskName:last.taskName,atomType:last.atomType,timestamp:last.timestamp,startElapsedMs:cluster[cluster.length-1].elapsedFromStartMs,endElapsedMs:last.elapsedFromStartMs,durationMs:duration,meanX:Math.round(cluster.reduce((s,d)=>s+d.x,0)/cluster.length),meanY:Math.round(cluster.reduce((s,d)=>s+d.y,0)/cluster.length),aoi:last.aoi,grid7x7:last.grid7x7});}}}
+    function getCompletionSeconds(){if(!startTime)return 0; const t=endTime?endTime-startTime:new Date()-startTime; return Math.round(t/1000);}
+    function updateSummary(){document.getElementById("recordCount").textContent=gazeData.length; document.getElementById("completionTime").textContent=getCompletionSeconds(); document.getElementById("stepCount").textContent=stepCount; document.getElementById("fixationCount").textContent=fixationData.length; const counts={},dwell={},fixCounts={}; gazeData.forEach(r=>{counts[r.aoi]=(counts[r.aoi]||0)+1; dwell[r.aoi]=(dwell[r.aoi]||0)+sampleIntervalMs;}); fixationData.forEach(r=>{fixCounts[r.aoi]=(fixCounts[r.aoi]||0)+1;}); const tbody=document.getElementById("aoiSummary"); tbody.innerHTML=""; Object.keys(counts).forEach(aoi=>{const tr=document.createElement("tr"); tr.innerHTML=`<td>${aoi}</td><td>${counts[aoi]}</td><td>${dwell[aoi]||0}</td><td>${fixCounts[aoi]||0}</td>`; tbody.appendChild(tr);});}
+
+    function csvDownload(rows,headers,filename){if(rows.length===0){alert("Henüz kayıtlı veri yok.");return;} const csv=[headers.join(",")]; rows.forEach(row=>csv.push(headers.map(h=>'"'+String(row[h]??"").replace(/"/g,'""')+'"').join(","))); const blob=new Blob([csv.join("\n")],{type:"text/csv;charset=utf-8;"}); const url=URL.createObjectURL(blob); const link=document.createElement("a"); link.href=url; link.download=filename; link.click(); URL.revokeObjectURL(url);}
+    function downloadRawCSV(){csvDownload(gazeData,["participantId","taskNo","taskName","atomType","timestamp","elapsedFromStartMs","x","y","aoi","grid7x7","stepCount","answerText","observerNote"],"raw_gaze_python_tasks.csv");}
+    function downloadTransitionsCSV(){csvDownload(transitions,["participantId","taskName","atomType","timestamp","fromAOI","toAOI","fromGrid","toGrid"],"scan_path_transitions_python_tasks.csv");}
+    function downloadSummaryCSV(){if(gazeData.length===0){alert("Henüz kayıtlı veri yok.");return;} const pid=document.getElementById("participantId").value.trim(), completionTimeSec=getCompletionSeconds(), grouped={}; gazeData.forEach(d=>{const key=`${d.taskNo}_${d.aoi}`; if(!grouped[key])grouped[key]=[]; grouped[key].push(d);}); const rows=Object.keys(grouped).map(key=>{const aoiRows=grouped[key], first=aoiRows[0], aoiFix=fixationData.filter(f=>f.taskNo===first.taskNo&&f.aoi===first.aoi); return{participantId:pid,taskNo:first.taskNo,taskName:first.taskName,atomType:first.atomType,completionTimeSec,stepCount,totalGazeSamples:gazeData.length,totalFixationCount:fixationData.length,totalTransitionCount:transitions.length,aoi:first.aoi,aoiGazeCount:aoiRows.length,aoiDwellTimeMs:aoiRows.length*sampleIntervalMs,aoiFixationCount:aoiFix.length,aoiMeanFixationDurationMs:aoiFix.length?Math.round(aoiFix.reduce((s,f)=>s+f.durationMs,0)/aoiFix.length):0};}); csvDownload(rows,["participantId","taskNo","taskName","atomType","completionTimeSec","stepCount","totalGazeSamples","totalFixationCount","totalTransitionCount","aoi","aoiGazeCount","aoiDwellTimeMs","aoiFixationCount","aoiMeanFixationDurationMs"],"summary_efficiency_aoi_python_tasks.csv");}
+    function buildReviewReportImageDataUrl(layer="combined"){
+      return buildReviewVisualizationDataUrl(layer);
+    }
+
+    function buildReviewVisualizationDataUrl(layer="combined"){
+      const task=tasks[currentTaskIndex];
+      const scale=2;
+      const sourceW=Math.max(1, reviewWrapSnapshot.width || 1200);
+      const sourceH=Math.max(1, reviewWrapSnapshot.height || 720);
+      const cssW=1200;
+      const cssH=Math.round(cssW * sourceH / sourceW);
+      const sx=cssW/sourceW;
+      const sy=cssH/sourceH;
+      const out=document.createElement("canvas");
+      out.width=cssW*scale;
+      out.height=cssH*scale;
+      const ctx=out.getContext("2d");
+      ctx.scale(scale,scale);
+
+      const layerTitles={
+        heatmap:"Isı Yayılım Haritası / Heatmap",
+        grid:"Grid Dwell Süreleri",
+        fixations:"Fixation Noktaları",
+        scanpath:"Scanpath Çizgisi",
+        combined:"Heatmap + Grid Dwell + Scanpath + Fixations"
+      };
+
+      function px(p){ return p.nx!==undefined ? p.nx*cssW : p.x*sx; }
+      function py(p){ return p.ny!==undefined ? p.ny*cssH : p.y*sy; }
+
+      function drawCodeBase(){
+        ctx.fillStyle="#f7f7f7";
+        ctx.fillRect(0,0,cssW,cssH);
+        const lines=task.code;
+        const fontSize=Math.min(52, Math.max(30, Math.floor(cssH/(lines.length*1.75))));
+        const lineH=fontSize*1.65;
+        const totalH=lines.length*lineH;
+        let y=(cssH-totalH)/2 + lineH/2;
+        ctx.font=`bold ${fontSize}px Consolas, Monaco, monospace`;
+        ctx.textBaseline="middle";
+        lines.forEach((line,i)=>{
+          ctx.fillStyle="#666";
+          ctx.textAlign="right";
+          ctx.fillText(String(i+1),120,y);
+          ctx.fillStyle="#111";
+          ctx.textAlign="left";
+          ctx.fillText(line,155,y);
+          y+=lineH;
+        });
+      }
+
+      function drawGridDwell(){
+        const cols=8, rows=6, cellW=cssW/cols, cellH=cssH/rows;
+        const dwellGrid=Array.from({length:rows},()=>Array(cols).fill(0));
+        reviewGaze.forEach(p=>{
+          const c=Math.min(cols-1,Math.max(0,Math.floor(px(p)/cellW)));
+          const r=Math.min(rows-1,Math.max(0,Math.floor(py(p)/cellH)));
+          dwellGrid[r][c]+=sampleIntervalMs;
+        });
+        const maxDwell=Math.max(1,...dwellGrid.flat());
+        for(let r=0;r<rows;r++){
+          for(let c=0;c<cols;c++){
+            if(dwellGrid[r][c]>0){
+              const alpha=0.12+0.50*(dwellGrid[r][c]/maxDwell);
+              ctx.fillStyle=`rgba(255,0,0,${alpha})`;
+              ctx.fillRect(c*cellW,r*cellH,cellW,cellH);
+            }
+            ctx.strokeStyle="rgba(0,0,0,0.30)";
+            ctx.lineWidth=1;
+            ctx.strokeRect(c*cellW,r*cellH,cellW,cellH);
+            if(dwellGrid[r][c]>0){
+              ctx.fillStyle="rgba(0,0,0,0.88)";
+              ctx.font="bold 16px Arial";
+              ctx.textAlign="center";
+              ctx.textBaseline="middle";
+              ctx.fillText((dwellGrid[r][c]/1000).toFixed(1)+"s",c*cellW+cellW/2,r*cellH+cellH/2);
+            }
+          }
+        }
+      }
+
+      function drawHeatmap(){
+        reviewGaze.forEach(p=>{
+          const x=px(p), y=py(p), radius=76;
+          const g=ctx.createRadialGradient(x,y,0,x,y,radius);
+          g.addColorStop(0,"rgba(255,0,0,0.38)");
+          g.addColorStop(0.35,"rgba(255,140,0,0.24)");
+          g.addColorStop(0.70,"rgba(255,255,0,0.12)");
+          g.addColorStop(1,"rgba(255,255,0,0)");
+          ctx.fillStyle=g;
+          ctx.beginPath();
+          ctx.arc(x,y,radius,0,2*Math.PI);
+          ctx.fill();
+        });
+      }
+
+      function drawScanpath(){
+        if(reviewGaze.length<=1) return;
+        ctx.strokeStyle="rgba(0,70,255,0.72)";
+        ctx.lineWidth=4;
+        ctx.beginPath();
+        ctx.moveTo(px(reviewGaze[0]), py(reviewGaze[0]));
+        for(let i=1;i<reviewGaze.length;i++) ctx.lineTo(px(reviewGaze[i]), py(reviewGaze[i]));
+        ctx.stroke();
+        ctx.fillStyle="rgba(0,70,255,0.85)";
+        reviewGaze.forEach((p,i)=>{
+          if(i%5!==0 && i!==reviewGaze.length-1) return;
+          ctx.beginPath();
+          ctx.arc(px(p),py(p),5,0,2*Math.PI);
+          ctx.fill();
+        });
+      }
+
+      function drawFixations(){
+        ctx.font="bold 16px Arial";
+        ctx.textAlign="center";
+        ctx.textBaseline="middle";
+        reviewFixations.forEach((f,i)=>{
+          const fx=f.x*sx;
+          const fy=f.y*sy;
+          ctx.fillStyle="rgba(0,80,255,0.70)";
+          ctx.beginPath();
+          ctx.arc(fx,fy,Math.min(46,16+f.duration/120),0,2*Math.PI);
+          ctx.fill();
+          ctx.strokeStyle="rgba(0,0,120,0.95)";
+          ctx.lineWidth=2;
+          ctx.stroke();
+          ctx.fillStyle="#fff";
+          ctx.fillText((f.duration/1000).toFixed(1)+"s",fx,fy+2);
+          ctx.fillStyle="#000";
+          ctx.fillText(String(i+1),fx,fy-34);
+        });
+      }
+
+      drawCodeBase();
+      if(layer==="grid" || layer==="combined") drawGridDwell();
+      if(layer==="heatmap" || layer==="combined") drawHeatmap();
+      if(layer==="scanpath" || layer==="combined") drawScanpath();
+      if(layer==="fixations" || layer==="combined") drawFixations();
+
+      ctx.fillStyle="#000";
+      ctx.textAlign="left";
+      ctx.font="bold 22px Arial";
+      ctx.fillText(`${task.title} | ${layerTitles[layer] || layerTitles.combined}`,24,30);
+      ctx.font="16px Arial";
+      ctx.fillText(`Review gaze: ${reviewGaze.length} | Review fixation: ${reviewFixations.length}`,24,58);
+      if(reviewGaze.length===0){
+        ctx.fillStyle="#b3261e";
+        ctx.font="bold 22px Arial";
+        ctx.fillText("Uyarı: 15 sn inceleme sırasında kod alanı üzerinde gaze verisi kaydedilmedi.",24,90);
+      }
+      return out.toDataURL("image/png");
+    }
+
+    function downloadReviewImage(){
+      lastReviewImageDataUrl=buildReviewVisualizationDataUrl("heatmap");
+      const pid=document.getElementById("participantId").value.trim()||"participant";
+      const link=document.createElement("a"); link.href=lastReviewImageDataUrl; link.download=`${pid}_isi_yayilim_heatmap.png`; link.click();
+    }
+
+    function getStudentAnswerText(){
+      return submittedAnswerText || (document.getElementById("answer").value || "").trim() || "Öğrenci çıktı tahmini henüz gönderilmedi.";
+    }
+
+    function getGridDwellStats(){
+      const sourceW=Math.max(1, reviewWrapSnapshot.width || 1200);
+      const sourceH=Math.max(1, reviewWrapSnapshot.height || 720);
+      const cols=8, rows=6, cellW=sourceW/cols, cellH=sourceH/rows;
+      const dwellGrid=Array.from({length:rows},()=>Array(cols).fill(0));
+      reviewGaze.forEach(p=>{
+        const x=p.nx!==undefined ? p.nx*sourceW : p.x;
+        const y=p.ny!==undefined ? p.ny*sourceH : p.y;
+        const c=Math.min(cols-1,Math.max(0,Math.floor(x/cellW)));
+        const r=Math.min(rows-1,Math.max(0,Math.floor(y/cellH)));
+        dwellGrid[r][c]+=sampleIntervalMs;
+      });
+      const cells=[];
+      for(let r=0;r<rows;r++){ for(let c=0;c<cols;c++){ if(dwellGrid[r][c]>0) cells.push({cell:`R${r+1}C${c+1}`, ms:dwellGrid[r][c]}); }}
+      cells.sort((a,b)=>b.ms-a.ms);
+      return cells;
+    }
+
+    function buildAnalysisText(kind){
+      const totalReviewMs=reviewGaze.length*sampleIntervalMs;
+      const totalSec=(totalReviewMs/1000).toFixed(1);
+      const answer=getStudentAnswerText();
+      const cells=getGridDwellStats();
+      const topCells=cells.slice(0,3).map(c=>`${c.cell}: ${(c.ms/1000).toFixed(1)} sn`).join(", ") || "Belirgin grid dwell verisi oluşmadı";
+      const fixationTotal=reviewFixations.length;
+      const avgFix=fixationTotal ? (reviewFixations.reduce((s,f)=>s+f.duration,0)/fixationTotal/1000).toFixed(2) : "0.00";
+      const longestFix=fixationTotal ? Math.max(...reviewFixations.map(f=>f.duration))/1000 : 0;
+      const transitionCount=transitions.length;
+      const base=`Öğrencinin gönderdiği çıktı tahmini: ${answer}\n\nToplam kayıt örneği: ${reviewGaze.length}. Yaklaşık inceleme süresi: ${totalSec} sn. Fixation sayısı: ${fixationTotal}. Ortalama fixation süresi: ${avgFix} sn. Scanpath geçiş sayısı: ${transitionCount}.`;
+      if(kind==="heatmap") return `Isı yayılım analizi, öğrencinin 15 saniyelik kod inceleme sürecinde bakışlarının hangi bölgelerde yoğunlaştığını yorumlamak için kullanılır. Daha koyu/sıcak bölgeler, öğrencinin ilgili kod satırları veya satır numarası çevresinde daha fazla görsel dikkat harcadığını gösterir.\n\n${base}\n\nBu oturumda en yoğun grid bölgeleri: ${topCells}. Isı yayılımının kod satırları üzerinde kümelenmesi, öğrencinin çıktıyı tahmin ederken belirli satırları yeniden değerlendirdiğine işaret edebilir. Isı dağılımı dağınıksa, öğrenci kod akışını daha geniş bir alanda taramış olabilir.`;
+      if(kind==="grid") return `Grid dwell analizi, kod alanını hücrelere ayırarak öğrencinin her bölgede yaklaşık ne kadar süre kaldığını gösterir. Bu veri, özellikle hangi satır veya ekran bölgesinin daha fazla bilişsel yük oluşturduğunu incelemek için kullanılabilir.\n\n${base}\n\nEn yüksek dwell süreleri: ${topCells}. Bu hücrelerdeki sürelerin yüksek olması, öğrencinin çıktı tahmini sırasında ilgili kod bölümünü daha ayrıntılı incelediğini düşündürür. Dwell süreleri yorumlanırken webcam tabanlı göz takibinin yaklaşık veri ürettiği dikkate alınmalıdır.`;
+      if(kind==="scanpath") return `Scanpath analizi, öğrencinin bakışlarının zaman içinde kod alanı üzerinde nasıl hareket ettiğini gösterir. Çizginin izlediği rota; öğrencinin satırlar arasında doğrusal, geri dönüşlü veya dağınık bir inceleme stratejisi kullanıp kullanmadığını anlamaya yardımcı olur.\n\n${base}\n\nBu oturumda yaklaşık ${transitionCount} AOI/grid geçişi kaydedilmiştir. Çok sayıda geri dönüş ve çapraz geçiş, öğrencinin kod akışını yeniden kontrol ettiğini veya belirli satırlar arasında karşılaştırma yaptığını gösterebilir. Daha düzenli bir scanpath ise satır satır izleme stratejisine işaret edebilir.`;
+      if(kind==="fixations") return `Fixation point analizi, öğrencinin gözünün kısa süreli olarak sabitlendiği noktaları ve bu noktalarda kalma süresini gösterir. Daha büyük veya süre değeri yüksek fixation noktaları, ilgili kod bölgesinde daha yoğun dikkat ve olası bilişsel işlem yapıldığını düşündürür.\n\n${base}\n\nEn uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanmıştır. Fixation noktalarının belirli satırlarda toplanması, öğrencinin çıktı tahmini için kritik gördüğü kod atomları veya işlem adımlarına odaklandığını gösterebilir.`;
+      return base;
+    }
+
+    async function downloadSessionPDF(){
+      try{
+        if(!isAnswerSubmitted){ alert("Lütfen önce AOI 3: Cevap Alanı bölümünde çıktı tahminini gönderiniz."); return; }
+        if(!window.jspdf || !window.jspdf.jsPDF){ alert("PDF kütüphanesi yüklenemedi. İnternet bağlantısını ve jsPDF CDN erişimini kontrol edin."); return; }
+        const { jsPDF } = window.jspdf;
+        const pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+        const pid=document.getElementById("participantId").value.trim()||"participant";
+        const task=tasks[currentTaskIndex];
+        const now=new Date().toISOString();
+        const imgX=14, imgY=40, imgW=268, imgH=154;
+
+        function addHeader(title){
+          pdf.setFontSize(18); pdf.text(title,14,15);
+          pdf.setFontSize(10);
+          pdf.text(`Katılımcı: ${pid}`,14,23);
+          pdf.text(`Görev: ${task.title}`,75,23);
+          pdf.text(`Tarih: ${now}`,14,29);
+          pdf.text(`15 sn gaze kaydı: ${reviewGaze.length} | Fixation: ${reviewFixations.length} | Toplam gaze: ${gazeData.length}`,170,29);
+          const answerLine=`Öğrenci çıktı tahmini: ${getStudentAnswerText()}`;
+          pdf.text(pdf.splitTextToSize(answerLine,260),14,35);
+        }
+        function addVisualPage(title, layer, first=false){
+          if(!first) pdf.addPage("a4","landscape");
+          addHeader(title);
+          const img=buildReviewVisualizationDataUrl(layer);
+          pdf.addImage(img,"PNG",imgX,imgY,imgW,imgH);
+        }
+        function addAnalysisPage(title, kind){
+          pdf.addPage("a4","portrait");
+          pdf.setFontSize(16); pdf.text(title,14,18);
+          pdf.setFontSize(10);
+          pdf.text(`Katılımcı: ${pid} | Görev: ${task.title}`,14,26);
+          const lines=pdf.splitTextToSize(buildAnalysisText(kind),180);
+          pdf.text(lines,14,36);
+        }
+
+        addVisualPage("Gaze Tracking Oturum Raporu - Isı Yayılım Haritası", "heatmap", true);
+        addAnalysisPage("Isı Yayılım Haritası Analiz Açıklaması", "heatmap");
+        addVisualPage("Gaze Tracking Oturum Raporu - Grid Dwell Süreleri", "grid");
+        addAnalysisPage("Grid Dwell Analiz Açıklaması", "grid");
+        addVisualPage("Gaze Tracking Oturum Raporu - Scanpath", "scanpath");
+        addAnalysisPage("Scanpath Analiz Açıklaması", "scanpath");
+        addVisualPage("Gaze Tracking Oturum Raporu - Fixation Noktaları", "fixations");
+        addAnalysisPage("Fixation Point Analiz Açıklaması", "fixations");
+
+        pdf.addPage("a4","portrait");
+        pdf.setFontSize(16); pdf.text("Sesli Düşünme Metni",14,18);
+        pdf.setFontSize(10);
+        const text=transcriptText.trim() || "Konuşma metni oluşmadı / kaydedilmedi.";
+        const split=pdf.splitTextToSize(text,180);
+        pdf.text(split,14,28);
+
+        pdf.addPage("a4","portrait");
+        pdf.setFontSize(16); pdf.text("Kod Metni ve Öğrenci Çıktı Tahmini",14,18);
+        pdf.setFontSize(11);
+        const codeLines=task.code.map((line,i)=>`${i+1}. ${line}`);
+        pdf.text(codeLines,14,30);
+        pdf.setFontSize(11);
+        pdf.text(pdf.splitTextToSize(`Öğrencinin yazdığı çıktı tahmini: ${getStudentAnswerText()}`,180),14,30+codeLines.length*7+10);
+        pdf.setFontSize(10);
+        pdf.text("Not: Grid hücrelerindeki süreler yaklaşık dwell time değeridir. Webcam tabanlı gaze tracking araştırma amaçlı yaklaşık veri üretir.",14,270);
+
+        pdf.save(`${pid}_gaze_session_report.pdf`);
+      }catch(error){
+        console.error(error);
+        alert("PDF üretilirken hata oluştu. F12 > Console bölümündeki hatayı kontrol edin.");
+      }
+    }
+
+    function downloadAudio(){if(!audioBlob||!audioUrl){alert("Henüz indirilebilir ses kaydı yok.");return;} const pid=document.getElementById("participantId").value.trim()||"participant"; const link=document.createElement("a"); link.href=audioUrl; link.download=`${pid}_think_aloud_audio.webm`; link.click();}
+    function downloadTranscript(){if(!transcriptText.trim()){alert("Henüz indirilebilir konuşma metni yok.");return;} const pid=document.getElementById("participantId").value.trim()||"participant", task=tasks[currentTaskIndex]; const content=[`Katılımcı: ${pid}`,`Görev: ${task.title}`,`Kod örüntüsü: ${task.atom}`,`Tarih: ${new Date().toISOString()}`,"","SES METNİ:",transcriptText.trim()].join("\n"); const blob=new Blob([content],{type:"text/plain;charset=utf-8"}); const url=URL.createObjectURL(blob), link=document.createElement("a"); link.href=url; link.download=`${pid}_think_aloud_transcript.txt`; link.click(); URL.revokeObjectURL(url);}
+    function resetData(){if(!confirm("Tüm kayıtlı veriler silinsin mi?"))return; gazeData=[]; fixationData=[]; transitions=[]; reviewGaze=[]; reviewFixations=[]; stepCount=0; startTime=null; endTime=null; previousAOI=null; previousGrid=null; lastRecordedAt=0; audioChunks=[]; audioBlob=null; audioUrl=null; transcriptText=""; if(speechRecognition&&isSpeechRecognitionRunning)speechRecognition.stop(); document.getElementById("audioStatus").textContent="Hazır değil"; document.getElementById("speechStatus").textContent="Hazır değil"; document.getElementById("reviewStatus").textContent="Hazır değil"; clearReviewCanvas(); updateSummary(); setStatus("Veriler temizlendi.");}
+
+    window.addEventListener("resize",()=>{if(document.getElementById("reviewOverlay").style.display==="block")resizeReviewCanvas();});
+    window.addEventListener("DOMContentLoaded",()=>{try{initTasks();}catch(e){console.error(e);alert("Görevler yüklenemedi. F12 > Console bölümündeki hatayı kontrol edin.");}});
+  </script>
+</body>
+</html>
 
