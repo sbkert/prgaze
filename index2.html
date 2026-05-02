@@ -82,7 +82,6 @@
       <button id="startTrackerButton" onclick="startTracker()">1. Kamera ve Göz Takibini Başlat</button>
       <button id="calibrationButton" onclick="startCalibration()">2. Otomatik Kalibrasyon</button>
       <button id="startRecordingButton" onclick="startRecording()">3. Gaze + Ses Kaydını Başlat</button>
-      <button id="stopRecordingButton" class="secondary" onclick="stopRecording()">Kaydı Durdur</button>
       <button id="previousTaskButton" onclick="previousTask()">Önceki Görev</button>
       <button id="nextTaskButton" onclick="nextTask()">Sonraki Görev</button>
       <button id="rawCsvButton" onclick="downloadRawCSV()">Ham Gaze CSV</button>
@@ -306,7 +305,7 @@
 
     function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 
-    async function showInstructionOverlay(title, text, seconds=10){
+    async function showInstructionOverlay(title, text, seconds=20){
       const overlay=document.getElementById("instructionOverlay");
       const titleEl=document.getElementById("instructionTitle");
       const textEl=document.getElementById("instructionText");
@@ -342,7 +341,7 @@
       await showInstructionOverlay(
         "Kod İnceleme Yönergesi",
         "Karşınıza tam ekran olarak kod satırları gelecektir. Kod satırlarını incelemek ve çıktıyı tahmin etmek için 15 sn süreniz bulunmaktadır. İnceleme sürecinde, göz takibiniz analiz edileceğinden, ekranda kod satırlarının bulunduğu alana odaklı olarak incelemenizi yapınız. Ek olarak, ses kaydınız da alınarak problem çözme süreciniz incelenecektir. Analiz sürecinizdeki tüm düşüncelerinizi sesli olarak ifade etmeniz çalışma verimliliği için çok önemli olacaktır. Kod satırlarının kenarlarında bulunan satır numaralarını analizlerinizde hedef belirlemek için kullanabilirsiniz.",
-        10
+        20
       );
 
       await startAudioRecording();
@@ -388,7 +387,7 @@
       await showInstructionOverlay(
         "Çıktı Tahmini ve Rapor İndirme",
         "Ekranın sağ alt bölümünde bulunan \"AOI 3: Cevap Alanı\" na çıktı tahmininizi yazarak gönder butonuna tıklayınız. Oturum raporunu ve oturumun diğer çıktılarını aktif olan butonlar ile indirmenizin ardından sonraki kod alanına geçebilirsiniz. Katkılarınız için teşekkür ederiz.",
-        10
+        20
       );
     }
     function resizeReviewCanvas(){
@@ -690,13 +689,35 @@
           const img=buildReviewVisualizationDataUrl(layer);
           pdf.addImage(img,"PNG",imgX,imgY,imgW,imgH);
         }
+        function addWrappedTextPages(title, bodyText, firstPage=false){
+          const marginX=14;
+          const topY=18;
+          const bodyStartY=34;
+          const bottomY=280;
+          const lineHeight=5.2;
+          const maxWidth=180;
+          const lines=pdf.splitTextToSize(bodyText || "", maxWidth);
+          let index=0;
+          let pageNo=1;
+          while(index < lines.length || pageNo===1){
+            if(!firstPage || pageNo>1) pdf.addPage("a4","portrait");
+            pdf.setFontSize(16);
+            pdf.text(pageNo===1 ? title : `${title} (devam)`, marginX, topY);
+            pdf.setFontSize(10);
+            pdf.text(`Katılımcı: ${pid} | Görev: ${task.title}`, marginX, 26);
+            let y=bodyStartY;
+            pdf.setFontSize(10);
+            while(index < lines.length && y <= bottomY){
+              pdf.text(lines[index], marginX, y);
+              y += lineHeight;
+              index++;
+            }
+            pageNo++;
+          }
+        }
+
         function addAnalysisPage(title, kind){
-          pdf.addPage("a4","portrait");
-          pdf.setFontSize(16); pdf.text(title,14,18);
-          pdf.setFontSize(10);
-          pdf.text(`Katılımcı: ${pid} | Görev: ${task.title}`,14,26);
-          const lines=pdf.splitTextToSize(buildAnalysisText(kind),180);
-          pdf.text(lines,14,36);
+          addWrappedTextPages(title, buildAnalysisText(kind));
         }
 
         addVisualPage("Gaze Tracking Oturum Raporu - Isı Yayılım Haritası", "heatmap", true);
@@ -708,22 +729,18 @@
         addVisualPage("Gaze Tracking Oturum Raporu - Fixation Noktaları", "fixations");
         addAnalysisPage("Fixation Point Analiz Açıklaması", "fixations");
 
-        pdf.addPage("a4","portrait");
-        pdf.setFontSize(16); pdf.text("Sesli Düşünme Metni",14,18);
-        pdf.setFontSize(10);
-        const text=transcriptText.trim() || "Konuşma metni oluşmadı / kaydedilmedi.";
-        const split=pdf.splitTextToSize(text,180);
-        pdf.text(split,14,28);
+        const transcriptPageText=transcriptText.trim() || "Konuşma metni oluşmadı / kaydedilmedi.";
+        addWrappedTextPages("Sesli Düşünme Metni", transcriptPageText);
 
-        pdf.addPage("a4","portrait");
-        pdf.setFontSize(16); pdf.text("Kod Metni ve Öğrenci Çıktı Tahmini",14,18);
-        pdf.setFontSize(11);
-        const codeLines=task.code.map((line,i)=>`${i+1}. ${line}`);
-        pdf.text(codeLines,14,30);
-        pdf.setFontSize(11);
-        pdf.text(pdf.splitTextToSize(`Öğrencinin yazdığı çıktı tahmini: ${getStudentAnswerText()}`,180),14,30+codeLines.length*7+10);
-        pdf.setFontSize(10);
-        pdf.text("Not: Grid hücrelerindeki süreler yaklaşık dwell time değeridir. Webcam tabanlı gaze tracking araştırma amaçlı yaklaşık veri üretir.",14,270);
+        const codePageText=[
+          "Kod Metni:",
+          ...task.code.map((line,i)=>`${i+1}. ${line}`),
+          "",
+          `Öğrencinin yazdığı çıktı tahmini: ${getStudentAnswerText()}`,
+          "",
+          "Not: Grid hücrelerindeki süreler yaklaşık dwell time değeridir. Webcam tabanlı gaze tracking araştırma amaçlı yaklaşık veri üretir."
+        ].join("\n");
+        addWrappedTextPages("Kod Metni ve Öğrenci Çıktı Tahmini", codePageText);
 
         pdf.save(`${pid}_gaze_session_report.pdf`);
       }catch(error){
@@ -741,4 +758,3 @@
   </script>
 </body>
 </html>
-
