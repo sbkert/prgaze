@@ -671,17 +671,34 @@
         const pid=document.getElementById("participantId").value.trim()||"participant";
         const task=tasks[currentTaskIndex];
         const now=new Date().toISOString();
-        const imgX=14, imgY=40, imgW=268, imgH=154;
+        const pageW=297, pageH=210;
+        const imgX=14, imgY=42, imgW=268, imgH=150;
+
+        // jsPDF'nin varsayılan fontu bazı Türkçe karakterleri hatalı gösterebildiği için
+        // PDF metinlerinde güvenli Latin karakter karşılıkları kullanılır.
+        function pdfSafeText(value){
+          return String(value ?? "")
+            .replace(/ı/g,"i").replace(/İ/g,"I")
+            .replace(/ğ/g,"g").replace(/Ğ/g,"G")
+            .replace(/ü/g,"u").replace(/Ü/g,"U")
+            .replace(/ş/g,"s").replace(/Ş/g,"S")
+            .replace(/ö/g,"o").replace(/Ö/g,"O")
+            .replace(/ç/g,"c").replace(/Ç/g,"C");
+        }
+        function pdfText(text, x, y, options){
+          if(Array.isArray(text)) pdf.text(text.map(pdfSafeText), x, y, options);
+          else pdf.text(pdfSafeText(text), x, y, options);
+        }
 
         function addHeader(title){
-          pdf.setFontSize(18); pdf.text(title,14,15);
+          pdf.setFontSize(18); pdfText(title,14,15);
           pdf.setFontSize(10);
-          pdf.text(`Katılımcı: ${pid}`,14,23);
-          pdf.text(`Görev: ${task.title}`,75,23);
-          pdf.text(`Tarih: ${now}`,14,29);
-          pdf.text(`15 sn gaze kaydı: ${reviewGaze.length} | Fixation: ${reviewFixations.length} | Toplam gaze: ${gazeData.length}`,170,29);
-          const answerLine=`Öğrenci çıktı tahmini: ${getStudentAnswerText()}`;
-          pdf.text(pdf.splitTextToSize(answerLine,260),14,35);
+          pdfText(`Katilimci: ${pid}`,14,23);
+          pdfText(`Gorev: ${task.title}`,75,23);
+          pdfText(`Tarih: ${now}`,14,29);
+          pdfText(`15 sn gaze kaydi: ${reviewGaze.length} | Fixation: ${reviewFixations.length} | Toplam gaze: ${gazeData.length}`,170,29);
+          const answerLine=`Ogrenci cikti tahmini: ${getStudentAnswerText()}`;
+          pdfText(pdf.splitTextToSize(pdfSafeText(answerLine),260),14,35);
         }
         function addVisualPage(title, layer, first=false){
           if(!first) pdf.addPage("a4","landscape");
@@ -689,26 +706,35 @@
           const img=buildReviewVisualizationDataUrl(layer);
           pdf.addImage(img,"PNG",imgX,imgY,imgW,imgH);
         }
-        function addWrappedTextPages(title, bodyText, firstPage=false){
+
+        function addWrappedTextPages(title, bodyText){
           const marginX=14;
-          const topY=18;
+          const topY=16;
+          const metaY=24;
           const bodyStartY=34;
-          const bottomY=280;
-          const lineHeight=5.2;
-          const maxWidth=180;
-          const lines=pdf.splitTextToSize(bodyText || "", maxWidth);
+          const bottomY=196;
+          const lineHeight=5.4;
+          const maxWidth=268;
+          const safeBody=pdfSafeText(bodyText || "");
+          const paragraphs=safeBody.split("\n");
+          const lines=[];
+          paragraphs.forEach((paragraph, pIndex)=>{
+            const wrapped=pdf.splitTextToSize(paragraph || " ", maxWidth);
+            wrapped.forEach(line=>lines.push(line));
+            if(pIndex < paragraphs.length-1) lines.push(" ");
+          });
           let index=0;
           let pageNo=1;
           while(index < lines.length || pageNo===1){
-            if(!firstPage || pageNo>1) pdf.addPage("a4","portrait");
+            pdf.addPage("a4","landscape");
             pdf.setFontSize(16);
-            pdf.text(pageNo===1 ? title : `${title} (devam)`, marginX, topY);
+            pdfText(pageNo===1 ? title : `${title} (devam)`, marginX, topY);
             pdf.setFontSize(10);
-            pdf.text(`Katılımcı: ${pid} | Görev: ${task.title}`, marginX, 26);
+            pdfText(`Katilimci: ${pid} | Gorev: ${task.title}`, marginX, metaY);
             let y=bodyStartY;
             pdf.setFontSize(10);
             while(index < lines.length && y <= bottomY){
-              pdf.text(lines[index], marginX, y);
+              pdfText(lines[index], marginX, y);
               y += lineHeight;
               index++;
             }
@@ -720,27 +746,27 @@
           addWrappedTextPages(title, buildAnalysisText(kind));
         }
 
-        addVisualPage("Gaze Tracking Oturum Raporu - Isı Yayılım Haritası", "heatmap", true);
-        addAnalysisPage("Isı Yayılım Haritası Analiz Açıklaması", "heatmap");
-        addVisualPage("Gaze Tracking Oturum Raporu - Grid Dwell Süreleri", "grid");
-        addAnalysisPage("Grid Dwell Analiz Açıklaması", "grid");
+        addVisualPage("Gaze Tracking Oturum Raporu - Isi Yayilim Haritasi", "heatmap", true);
+        addAnalysisPage("Isi Yayilim Haritasi Analiz Aciklamasi", "heatmap");
+        addVisualPage("Gaze Tracking Oturum Raporu - Grid Dwell Sureleri", "grid");
+        addAnalysisPage("Grid Dwell Analiz Aciklamasi", "grid");
         addVisualPage("Gaze Tracking Oturum Raporu - Scanpath", "scanpath");
-        addAnalysisPage("Scanpath Analiz Açıklaması", "scanpath");
-        addVisualPage("Gaze Tracking Oturum Raporu - Fixation Noktaları", "fixations");
-        addAnalysisPage("Fixation Point Analiz Açıklaması", "fixations");
+        addAnalysisPage("Scanpath Analiz Aciklamasi", "scanpath");
+        addVisualPage("Gaze Tracking Oturum Raporu - Fixation Noktalari", "fixations");
+        addAnalysisPage("Fixation Point Analiz Aciklamasi", "fixations");
 
-        const transcriptPageText=transcriptText.trim() || "Konuşma metni oluşmadı / kaydedilmedi.";
-        addWrappedTextPages("Sesli Düşünme Metni", transcriptPageText);
+        const transcriptPageText=transcriptText.trim() || "Konusma metni olusmadi / kaydedilmedi.";
+        addWrappedTextPages("Sesli Dusunme Metni", transcriptPageText);
 
         const codePageText=[
           "Kod Metni:",
           ...task.code.map((line,i)=>`${i+1}. ${line}`),
           "",
-          `Öğrencinin yazdığı çıktı tahmini: ${getStudentAnswerText()}`,
+          `Ogrencinin yazdigi cikti tahmini: ${getStudentAnswerText()}`,
           "",
-          "Not: Grid hücrelerindeki süreler yaklaşık dwell time değeridir. Webcam tabanlı gaze tracking araştırma amaçlı yaklaşık veri üretir."
+          "Not: Grid hucrelerindeki sureler yaklasik dwell time degeridir. Webcam tabanli gaze tracking arastirma amacli yaklasik veri uretir."
         ].join("\n");
-        addWrappedTextPages("Kod Metni ve Öğrenci Çıktı Tahmini", codePageText);
+        addWrappedTextPages("Kod Metni ve Ogrenci Cikti Tahmini", codePageText);
 
         pdf.save(`${pid}_gaze_session_report.pdf`);
       }catch(error){
