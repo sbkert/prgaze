@@ -8,6 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
   <style>
     body { margin: 0; font-family: Arial, sans-serif; background: #f5f5f5; color: #222; }
@@ -37,7 +38,7 @@
     th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
     th { background: #eeeeee; }
 
-    #videoBox { position: fixed; right: 12px; top: 60px; width: 250px; height: 190px; z-index: 9995; border: 3px solid #111; background: #000; overflow: hidden; }
+    #videoBox { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); width: min(250px, 28vw); height: min(190px, 21vw); min-width: 170px; min-height: 128px; z-index: 9995; border: 3px solid #111; background: #000; overflow: hidden; }
     #inputVideo { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
     #faceCanvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform: scaleX(-1); pointer-events: none; }
     #gazeDot { position: fixed; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.88); border-radius: 50%; pointer-events: none; z-index: 10004; display: none; transform: translate(-50%, -50%); box-shadow: 0 0 0 7px rgba(255,0,0,0.16); }
@@ -50,6 +51,8 @@
     #reviewOverlay { position: fixed; inset: 0; display: none; z-index: 10000; background: #ffffff; padding: 28px; box-sizing: border-box; }
     #reviewHeader { height: 0; display: none; }
     #reviewTimer { display: none; }
+    #reviewContinueButton { position: fixed; right: 34px; bottom: 30px; z-index: 10003; padding: 12px 24px; font-size: 17px; background: #16803c; }
+    #reviewContinueButton:hover { background: #0f642e; }
     #reviewCodeWrap { position: relative; height: calc(100vh - 56px); border: 3px solid #222; border-radius: 12px; background: #f7f7f7; overflow: hidden; display: flex; align-items: flex-start; justify-content: center; padding-top: 72px; box-sizing: border-box; }
     #reviewCode { position: relative; margin: 0; padding: 18px 28px 28px 28px; font-size: clamp(30px, 3vw, 48px); line-height: 1.85; overflow: visible; background: transparent; z-index: 1; max-width: 94%; }
     #reviewVisualCanvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; display: none; }
@@ -58,7 +61,7 @@
     #instructionBox { max-width: 980px; border: 4px solid #222; border-radius: 18px; padding: 38px 46px; background: #f7f7f7; box-shadow: 0 6px 24px rgba(0,0,0,0.18); }
     #instructionBox h2 { margin-top: 0; font-size: 30px; }
     #instructionText { font-size: 24px; line-height: 1.55; }
-    #instructionCountdown { margin-top: 24px; font-weight: bold; font-size: 22px; color: #2d6cdf; }
+    #instructionCountdown { display: none; }
     #instructionSkipButton { position: fixed; right: 34px; bottom: 30px; padding: 12px 24px; font-size: 17px; background: #16803c; }
     #instructionSkipButton:hover { background: #0f642e; }
     .atom-description { background: #f0f6ff; border-left: 6px solid #2d6cdf; border-radius: 8px; padding: 16px 18px; font-size: 16px; line-height: 1.55; color: #1f2937; }
@@ -80,6 +83,32 @@
     #completionNotice .arrowHint { margin-top: 14px; font-size: 24px; font-weight: bold; color: #2d6cdf; }
     #pdfButton.pdf-attention { outline: 5px solid #ffb000; box-shadow: 0 0 0 8px rgba(255,176,0,0.25), 0 0 24px rgba(255,176,0,0.8); animation: pdfPulse 1s ease-in-out infinite alternate; }
     @keyframes pdfPulse { from { transform: scale(1); } to { transform: scale(1.06); } }
+
+    @media (max-width: 900px) {
+      header { font-size: 16px; padding: 12px 14px; }
+      main { padding: 14px; }
+      #experimentArea { grid-template-columns: 1fr; }
+      .panel { padding: 14px; }
+      #videoBox { width: 180px; height: 135px; top: 8px; }
+      #instructionOverlay { padding: 18px; }
+      #instructionBox { padding: 24px 22px; max-width: 92vw; }
+      #instructionText { font-size: 18px; line-height: 1.45; }
+      #instructionBox h2 { font-size: 24px; }
+      #reviewOverlay { padding: 14px; }
+      #reviewCodeWrap { height: calc(100vh - 28px); padding-top: 56px; }
+      #reviewCode { font-size: clamp(22px, 5.2vw, 34px); line-height: 1.7; }
+      #reviewCode .code-line { grid-template-columns: 52px 1fr; }
+      #instructionSkipButton, #reviewContinueButton { right: 18px; bottom: 18px; }
+    }
+    @media (max-width: 520px) {
+      button { font-size: 13px; padding: 9px 12px; }
+      input, select, textarea { width: calc(100% - 24px); }
+      #videoBox { width: 150px; height: 112px; }
+      #reviewCodeWrap { padding-top: 42px; }
+      #reviewCode { font-size: clamp(18px, 5.8vw, 26px); padding: 12px; }
+      #reviewCode .code-line { grid-template-columns: 42px 1fr; column-gap: 8px; }
+      .line-code { white-space: pre-wrap; }
+    }
   </style>
 </head>
 <body>
@@ -113,7 +142,7 @@
       <button id="transcriptButton" onclick="downloadTranscript()">Ses Metnini İndir</button>
       <button class="danger" onclick="resetData()">Veriyi Temizle</button>
 
-      <p class="small">Not: Isı haritası, scanpath çizgileri ve fixation noktaları öğrenci ekranda izlerken gösterilmez; 15 saniyelik tam ekran kod inceleme oturumu bittikten sonra rapor görseline ve PDF’ye eklenir.</p>
+      <p class="small">Not: Isı haritası, scanpath çizgileri ve fixation noktaları öğrenci ekranda izlerken gösterilmez; tam ekran kod inceleme oturumu tamamlandıktan sonra rapor görseline ve PDF’ye eklenir.</p>
       <p class="small warning">Veriler merkezi sunucuya gönderilmez. CSV, görsel, ses ve metin dosyaları bu bilgisayardan indirilir.</p>
     </section>
 
@@ -151,7 +180,7 @@
 
     <section class="panel">
       <h2>Canlı Veri Özeti</h2>
-      <p>15 sn inceleme gaze kayıt sayısı: <span id="recordCount">0</span></p>
+      <p>Kod inceleme gaze kayıt sayısı: <span id="recordCount">0</span></p>
       <p>Task completion time: <span id="completionTime">0</span> sn</p>
       <p>Step count: <span id="stepCount">0</span></p>
       <p>Total fixation/focus count: <span id="fixationCount">0</span></p>
@@ -201,12 +230,13 @@
 
   <div id="reviewOverlay">
     <div id="reviewHeader">
-      <div id="reviewTitle">15 sn Kod İnceleme Modu</div>
+      <div id="reviewTitle">Kod İnceleme Modu</div>
       <div id="reviewTimer">15</div>
     </div>
     <div id="reviewCodeWrap" class="aoi" data-aoi="Kod Alanı">
       <pre id="reviewCode"></pre>
       <canvas id="reviewVisualCanvas"></canvas>
+      <button id="reviewContinueButton" type="button" onclick="finishReviewMode()">İlerle</button>
     </div>
   </div>
 
@@ -289,9 +319,9 @@
         atom: "Nested Condition",
         prompt: "Girintileri ve koşul akışını takip ederek çıktıyı tahmin ediniz.",
         atomDescription: "İç içe koşul örüntüsünde bir koşulun sonucu, başka bir koşulun değerlendirilip değerlendirilmeyeceğini belirler. Girintiler hangi bloğun hangi koşula ait olduğunu gösterir. Yanlış blok eşleştirmesi, özellikle else satırlarında hatalı çıktı tahminine neden olabilir.",
-        code: ["x = 7", "if x > 5:", "    if x % 2 == 0:", "        print('A')", "    else:", "        print('B')", "else:", "    print('C')"],
-        correctAnswer: "B",
-        correctAnswerAliases: ["B", "b", "'B'", "\"B\""]
+        code: ["x = 4", "if x > 5:", "    if x % 2 == 0:", "        print('A')", "    else:", "        print('B')", "else:", "    print('C')"],
+        correctAnswer: "C",
+        correctAnswerAliases: ["C", "c", "'C'", "\"C\""]
       },
       {
         title: "Görev 10 - Fonksiyon ve Dönüş Değeri",
@@ -342,7 +372,7 @@
     const fixationRadiusPx = 75;
     const calibrationSamplesPerPoint = 65;
     const reviewDurationSec = 15;
-    const calibrationPoints = [[10,10],[50,10],[90,10],[10,50],[50,50],[90,50],[10,90],[50,90],[90,90]];
+    const calibrationPoints = [[15,15],[50,15],[85,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
     const gazeReportYOffsetPx = -55; // Rapor görsellerinde gaze katmanını biraz yukarı hizalar.
 
     function initTasks() {
@@ -468,7 +498,7 @@
 
     function sleep(ms){ return new Promise(resolve=>setTimeout(resolve, ms)); }
 
-    async function showInstructionOverlay(title, text, seconds=20){
+    async function showInstructionOverlay(title, text, seconds=null){
       const overlay=document.getElementById("instructionOverlay");
       const titleEl=document.getElementById("instructionTitle");
       const textEl=document.getElementById("instructionText");
@@ -476,26 +506,16 @@
       const skipBtn=document.getElementById("instructionSkipButton");
       titleEl.textContent=title;
       textEl.textContent=text;
+      if(counter) counter.textContent="";
       overlay.style.display="flex";
-      let remaining=seconds;
-      let resolved=false;
-      counter.textContent=`${remaining} sn sonra devam edilecektir. Dilerseniz İlerle butonu ile yönergeyi geçebilirsiniz.`;
-      if(instructionTimerId) clearInterval(instructionTimerId);
+      if(instructionTimerId){ clearInterval(instructionTimerId); instructionTimerId=null; }
       await new Promise(resolve=>{
         const finish=()=>{
-          if(resolved) return;
-          resolved=true;
-          if(instructionTimerId){ clearInterval(instructionTimerId); instructionTimerId=null; }
           if(skipBtn) skipBtn.onclick=null;
           overlay.style.display="none";
           resolve();
         };
         if(skipBtn) skipBtn.onclick=finish;
-        instructionTimerId=setInterval(()=>{
-          remaining--;
-          counter.textContent=remaining>0 ? `${remaining} sn sonra devam edilecektir. Dilerseniz İlerle butonu ile yönergeyi geçebilirsiniz.` : "Devam ediliyor...";
-          if(remaining<=0) finish();
-        },1000);
       });
     }
 
@@ -511,11 +531,11 @@
       const submitBtn=document.getElementById("submitAnswerButton"); if(submitBtn) submitBtn.disabled=true;
       setDownloadButtonsEnabled(false);
       document.getElementById("startRecordingButton").disabled=true;
-      setStatus("Başlangıç yönergesi gösteriliyor. Ardından görevler otomatik olarak 15 sn tam ekran kod inceleme akışıyla ilerleyecektir.");
+      setStatus("Başlangıç yönergesi gösteriliyor. Ardından görevler otomatik olarak tam ekran kod inceleme akışıyla ilerleyecektir.");
 
       await showInstructionOverlay(
         "Kod İnceleme Yönergesi",
-        "Karşınıza tam ekran olarak kod satırları gelecektir. Kod satırlarını incelemek ve çıktıyı tahmin etmek için 15 sn süreniz bulunmaktadır. İnceleme sürecinde, göz takibiniz analiz edileceğinden, ekranda kod satırlarının bulunduğu alana odaklı olarak incelemenizi yapınız. Ek olarak, ses kaydınız da alınarak problem çözme süreciniz incelenecektir. Analiz sürecinizdeki tüm düşüncelerinizi sesli olarak ifade etmeniz çalışma verimliliği için çok önemli olacaktır. Kod satırlarının kenarlarında bulunan satır numaralarını analizlerinizde hedef belirlemek için kullanabilirsiniz.",
+        "Karşınıza tam ekran olarak kod satırları gelecektir. Kod satırlarını incelemek ve çıktıyı tahmin etmek için İnceleme sürecinde, göz takibiniz analiz edileceğinden, ekranda kod satırlarının bulunduğu alana odaklı olarak incelemenizi yapınız. Ek olarak, ses kaydınız da alınarak problem çözme süreciniz incelenecektir. Analiz sürecinizdeki tüm düşüncelerinizi sesli olarak ifade etmeniz çalışma verimliliği için çok önemli olacaktır. Kod satırlarının kenarlarında bulunan satır numaralarını analizlerinizde hedef belirlemek için kullanabilirsiniz.",
         25
       );
 
@@ -530,27 +550,19 @@
       reviewGaze=[]; reviewFixations=[]; reviewCodeLayout=[]; gazeData=[]; fixationData=[]; transitions=[]; lastReviewImageDataUrl=null;
       isReviewMode=true; isRecording=true; lastRecordedAt=0; startTime=new Date(); endTime=null; previousAOI=null; previousGrid=null; stepCount=0;
       document.getElementById("reviewOverlay").style.display="block";
-      document.getElementById("reviewTitle").textContent=`${task.title} - 15 sn Kod İnceleme`;
+      document.getElementById("reviewTitle").textContent=`${task.title} - Kod İnceleme`;
       renderCode(document.getElementById("reviewCode"), task.code);
       resizeReviewCanvas();
       captureReviewCodeLayout();
       clearReviewCanvas();
       document.getElementById("reviewStatus").textContent="İnceleme sürüyor";
-      let remaining=reviewDurationSec;
-      document.getElementById("reviewTimer").textContent=remaining;
-      if(reviewTimerId) clearInterval(reviewTimerId);
-      reviewTimerId=setInterval(()=>{
-        remaining--;
-        document.getElementById("reviewTimer").textContent=remaining;
-        if(remaining<=0){
-          clearInterval(reviewTimerId);
-          reviewTimerId=null;
-          finishReviewMode();
-        }
-      },1000);
+      const continueBtn=document.getElementById("reviewContinueButton");
+      if(continueBtn) continueBtn.disabled=false;
     }
 
     async function finishReviewMode(){
+      if(!isReviewMode) return;
+      const continueBtn=document.getElementById("reviewContinueButton"); if(continueBtn) continueBtn.disabled=true;
       isReviewMode=false;
       isRecording=false;
       endTime=new Date();
@@ -559,7 +571,7 @@
       finalizeReviewVisual();
       updateSummary();
       const submitBtn=document.getElementById("submitAnswerButton"); if(submitBtn) submitBtn.disabled=false;
-      setStatus("15 sn kod inceleme tamamlandı. Lütfen AOI 3: Cevap Alanı bölümüne çıktı tahmininizi yazıp Gönder butonuna tıklayınız.");
+      setStatus("Kod inceleme tamamlandı. Lütfen AOI 3: Cevap Alanı bölümüne çıktı tahmininizi yazıp Gönder butonuna tıklayınız.");
       await showInstructionOverlay(
         "Çıktı Tahmini ve Rapor İndirme",
         `Ekranın sağ alt bölümünde bulunan "AOI 3: Cevap Alanı" na çıktı tahmininizi yazarak gönder butonuna tıklayınız. Gönder butonuna tıkladığınızda sonraki görev otomatik olarak başlayacaktır. Tüm görevler tamamlandığında oturum raporunu ve oturumun diğer çıktılarını aktif olan butonlar ile indirebilirsiniz. Katkılarınız için teşekkür ederiz.`,
@@ -687,7 +699,7 @@
         if(statusEl) statusEl.textContent="Çıktı tahmini gönderildi. Sonraki görev otomatik olarak başlatılıyor.";
         setDownloadButtonsEnabled(false);
         loadTask(currentTaskIndex + 1);
-        setStatus("Sonraki görev otomatik olarak başlatılıyor. Yeni kod alanı 15 sn tam ekranda gösterilecektir.");
+        setStatus("Sonraki görev otomatik olarak başlatılıyor. Yeni kod alanı tam ekranda gösterilecektir.");
         await sleep(800);
         await startAudioRecording();
         startSpeechRecognition();
@@ -916,17 +928,41 @@
       if(rg.length===0){
         ctx.fillStyle="#b3261e";
         ctx.font="bold 22px Arial";
-        ctx.fillText("Uyarı: 15 sn inceleme sırasında kod alanı üzerinde gaze verisi kaydedilmedi.",24,90);
+        ctx.fillText("Uyarı: kod inceleme sırasında kod alanı üzerinde gaze verisi kaydedilmedi.",24,90);
       }
       return out.toDataURL("image/png");
     }
 
-    function downloadReviewImage(){
-      const session=completedTaskSessions.length ? completedTaskSessions[completedTaskSessions.length-1] : null;
-      lastReviewImageDataUrl=buildReviewVisualizationDataUrl("heatmap", session);
+    function dataUrlToBlob(dataUrl){
+      const parts=dataUrl.split(",");
+      const mime=(parts[0].match(/:(.*?);/)||[])[1] || "application/octet-stream";
+      const binary=atob(parts[1]);
+      const len=binary.length;
+      const bytes=new Uint8Array(len);
+      for(let i=0;i<len;i++) bytes[i]=binary.charCodeAt(i);
+      return new Blob([bytes], {type:mime});
+    }
+
+    async function downloadReviewImage(){
       const pid=document.getElementById("participantId").value.trim()||"participant";
-      const suffix=session ? `_gorev_${session.taskNo}` : "";
-      const link=document.createElement("a"); link.href=lastReviewImageDataUrl; link.download=`${pid}${suffix}_isi_yayilim_heatmap.png`; link.click();
+      if(completedTaskSessions.length){
+        if(!window.JSZip){ alert("ZIP kütüphanesi yüklenemedi. İnternet bağlantısını ve JSZip CDN erişimini kontrol edin."); return; }
+        const zip=new JSZip();
+        completedTaskSessions.forEach(session=>{
+          const img=buildReviewVisualizationDataUrl("heatmap", session);
+          zip.file(`${pid}_gorev_${session.taskNo}_isi_yayilim_heatmap.png`, dataUrlToBlob(img));
+        });
+        const blob=await zip.generateAsync({type:"blob"});
+        const url=URL.createObjectURL(blob);
+        const link=document.createElement("a");
+        link.href=url;
+        link.download=`${pid}_tum_gorevler_isi_yayilim_gorselleri.zip`;
+        link.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+      lastReviewImageDataUrl=buildReviewVisualizationDataUrl("heatmap", null);
+      const link=document.createElement("a"); link.href=lastReviewImageDataUrl; link.download=`${pid}_isi_yayilim_heatmap.png`; link.click();
     }
 
     function getStudentAnswerText(session=null){
@@ -999,8 +1035,8 @@
       const transitionCount=tr.length;
       const base=`Öğrencinin gönderdiği çıktı tahmini: ${answer}
 
-Toplam kayıt örneği: ${rg.length}. Yaklaşık inceleme süresi: ${totalSec} sn. Fixation sayısı: ${fixationTotal}. Ortalama fixation süresi: ${avgFix} sn. Scanpath geçiş sayısı: ${transitionCount}.`;
-      if(kind==="heatmap") return `Isı yayılım analizi, öğrencinin 15 saniyelik kod inceleme sürecinde bakışlarının hangi bölgelerde yoğunlaştığını yorumlamak için kullanılır. Daha koyu/sıcak bölgeler, öğrencinin ilgili kod satırları veya satır numarası çevresinde daha fazla görsel dikkat harcadığını gösterir.
+Toplam kayıt örneği: ${rg.length}. Yaklaşık kayıt süresi: ${totalSec} sn. Fixation sayısı: ${fixationTotal}. Ortalama fixation süresi: ${avgFix} sn. Scanpath geçiş sayısı: ${transitionCount}.`;
+      if(kind==="heatmap") return `Isı yayılım analizi, öğrencinin kod inceleme sürecinde bakışlarının hangi bölgelerde yoğunlaştığını yorumlamak için kullanılır. Daha koyu/sıcak bölgeler, öğrencinin ilgili kod satırları veya satır numarası çevresinde daha fazla görsel dikkat harcadığını gösterir.
 
 ${base}
 
@@ -1070,7 +1106,7 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
           pdfText(`Katilimci: ${pid}`,14,23);
           pdfText(`Gorev: ${session.taskNo} - ${session.task.title}`,75,23);
           pdfText(`Tarih: ${now}`,14,29);
-          pdfText(`15 sn gaze kaydi: ${(session.reviewGaze||[]).length} | Fixation: ${(session.reviewFixations||[]).length} | Toplam gaze: ${(session.gazeData||[]).length}`,170,29);
+          pdfText(`Kod inceleme gaze kaydi: ${(session.reviewGaze||[]).length} | Fixation: ${(session.reviewFixations||[]).length} | Toplam gaze: ${(session.gazeData||[]).length}`,170,29);
           const answerLine=`Ogrenci cikti tahmini: ${session.answerText}`;
           pdfText(pdf.splitTextToSize(pdfSafeText(answerLine),260),14,35);
         }
@@ -1174,19 +1210,23 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
       }
     }
 
-    function downloadAudio(){
+    async function downloadAudio(){
       const pid=document.getElementById("participantId").value.trim()||"participant";
       if(completedTaskSessions.length){
-        const sessionsWithAudio=completedTaskSessions.filter(s=>s.audioUrl);
+        const sessionsWithAudio=completedTaskSessions.filter(s=>s.audioBlob);
         if(!sessionsWithAudio.length){alert("Tamamlanan görevler için indirilebilir ses kaydı bulunamadı.");return;}
-        sessionsWithAudio.forEach((session,index)=>{
-          setTimeout(()=>{
-            const link=document.createElement("a");
-            link.href=session.audioUrl;
-            link.download=`${pid}_gorev_${session.taskNo}_think_aloud_audio.webm`;
-            link.click();
-          }, index*550);
-        });
+        if(!window.JSZip){ alert("ZIP kütüphanesi yüklenemedi. İnternet bağlantısını ve JSZip CDN erişimini kontrol edin."); return; }
+        const zip=new JSZip();
+        for(const session of sessionsWithAudio){
+          zip.file(`${pid}_gorev_${session.taskNo}_think_aloud_audio.webm`, session.audioBlob);
+        }
+        const blob=await zip.generateAsync({type:"blob"});
+        const url=URL.createObjectURL(blob);
+        const link=document.createElement("a");
+        link.href=url;
+        link.download=`${pid}_tum_gorevler_ses_kayitlari.zip`;
+        link.click();
+        URL.revokeObjectURL(url);
         return;
       }
       if(!audioBlob||!audioUrl){alert("Henüz indirilebilir ses kaydı yok.");return;}
