@@ -73,6 +73,13 @@
     #progressTrack { width: 100%; height: 22px; background: #e0e0e0; border-radius: 20px; overflow: hidden; }
     #progressBar { width: 0%; height: 100%; background: #2d6cdf; transition: width 0.2s ease; }
     #submitAnswerButton { background: #16803c; margin-top: 10px; }
+
+    #completionNotice { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); display: none; z-index: 10006; width: min(760px, 86vw); background: #fff; border: 4px solid #16803c; border-radius: 20px; padding: 28px 34px; box-shadow: 0 10px 34px rgba(0,0,0,0.28); text-align: center; pointer-events: none; }
+    #completionNotice h2 { margin: 0 0 12px 0; font-size: 28px; color: #16803c; }
+    #completionNotice p { margin: 8px 0; font-size: 20px; line-height: 1.45; color: #222; }
+    #completionNotice .arrowHint { margin-top: 14px; font-size: 24px; font-weight: bold; color: #2d6cdf; }
+    #pdfButton.pdf-attention { outline: 5px solid #ffb000; box-shadow: 0 0 0 8px rgba(255,176,0,0.25), 0 0 24px rgba(255,176,0,0.8); animation: pdfPulse 1s ease-in-out infinite alternate; }
+    @keyframes pdfPulse { from { transform: scale(1); } to { transform: scale(1.06); } }
   </style>
 </head>
 <body>
@@ -183,6 +190,13 @@
       <div id="progressText">Hazırlanıyor...</div>
       <div id="progressTrack"><div id="progressBar"></div></div>
     </div>
+  </div>
+
+
+  <div id="completionNotice">
+    <h2>Tüm görevleri tamamladınız</h2>
+    <p>Görev verilerinize ilişkin tüm kayıtları PDF olarak indirmek için <strong>Oturum Raporu PDF İndir</strong> butonuna tıklayabilirsiniz.</p>
+    <div class="arrowHint">↑ Üst bölümde işaretlenen rapor butonunu kullanınız ↑</div>
   </div>
 
   <div id="reviewOverlay">
@@ -401,6 +415,24 @@
       if(isRecording && isReviewMode) recordGazeSample(lastGaze);
     }
 
+
+    function showCompletionNotice(){
+      const notice=document.getElementById("completionNotice");
+      const pdfBtn=document.getElementById("pdfButton");
+      if(notice) notice.style.display="block";
+      if(pdfBtn){
+        pdfBtn.classList.add("pdf-attention");
+        try{ pdfBtn.scrollIntoView({behavior:"smooth", block:"center", inline:"center"}); }catch(e){ pdfBtn.scrollIntoView(); }
+      }
+    }
+
+    function hideCompletionNotice(){
+      const notice=document.getElementById("completionNotice");
+      const pdfBtn=document.getElementById("pdfButton");
+      if(notice) notice.style.display="none";
+      if(pdfBtn) pdfBtn.classList.remove("pdf-attention");
+    }
+
     function setDownloadButtonsEnabled(enabled){
       ["previousTaskButton","nextTaskButton","rawCsvButton","summaryCsvButton","scanPathCsvButton","heatmapImageButton","pdfButton","audioButton","transcriptButton"].forEach(id=>{
         const el=document.getElementById(id); if(el) el.disabled=!enabled;
@@ -605,6 +637,7 @@
         const startBtn=document.getElementById("startRecordingButton"); if(startBtn) startBtn.disabled=false;
         if(statusEl) statusEl.textContent="Tüm görevler tamamlandı. Rapor ve veri indirme butonları aktif edildi.";
         setStatus(`Tüm görevler tamamlandı. ${completedTaskSessions.length} görev için toplu oturum raporu indirilebilir.`);
+        showCompletionNotice();
       }
     }
 
@@ -896,6 +929,7 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
     function waitFrame(){ return new Promise(resolve=>setTimeout(resolve, 30)); }
 
     async function downloadSessionPDF(){
+      hideCompletionNotice();
       try{
         if(completedTaskSessions.length===0){ alert("Henüz tamamlanmış görev yok. Lütfen en az bir görevi tamamlayıp çıktı tahminini gönderiniz."); return; }
         if(!window.jspdf || !window.jspdf.jsPDF){ alert("PDF kütüphanesi yüklenemedi. İnternet bağlantısını ve jsPDF CDN erişimini kontrol edin."); return; }
@@ -1019,7 +1053,7 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
       const link=document.createElement("a"); link.href=audioUrl; link.download=`${pid}_think_aloud_audio.webm`; link.click();
     }
     function downloadTranscript(){const pid=document.getElementById("participantId").value.trim()||"participant"; let content=""; if(completedTaskSessions.length){content=[`Katılımcı: ${pid}`,`Tarih: ${new Date().toISOString()}`,`Tamamlanan görev sayısı: ${completedTaskSessions.length}`,""].join("\n"); completedTaskSessions.forEach(session=>{content += [`GÖREV ${session.taskNo}: ${session.task.title}`,`Kod örüntüsü: ${session.task.atom}`,`Öğrenci çıktı tahmini: ${session.answerText}`,"SES METNİ:",session.transcriptText.trim() || "Konuşma metni oluşmadı / kaydedilmedi.","","------------------------------",""]; content += "\n";});} else { if(!transcriptText.trim()){alert("Henüz indirilebilir konuşma metni yok.");return;} const task=tasks[currentTaskIndex]; content=[`Katılımcı: ${pid}`,`Görev: ${task.title}`,`Kod örüntüsü: ${task.atom}`,`Tarih: ${new Date().toISOString()}`,"","SES METNİ:",transcriptText.trim()].join("\n"); } const blob=new Blob([content],{type:"text/plain;charset=utf-8"}); const url=URL.createObjectURL(blob), link=document.createElement("a"); link.href=url; link.download=`${pid}_all_tasks_think_aloud_transcript.txt`; link.click(); URL.revokeObjectURL(url);}
-    function resetData(){if(!confirm("Tüm kayıtlı veriler silinsin mi?"))return; gazeData=[]; fixationData=[]; transitions=[]; reviewGaze=[]; reviewFixations=[]; completedTaskSessions=[]; isBatchRunning=false; stepCount=0; startTime=null; endTime=null; previousAOI=null; previousGrid=null; lastRecordedAt=0; audioChunks=[]; audioBlob=null; audioUrl=null; transcriptText=""; if(speechRecognition&&isSpeechRecognitionRunning)speechRecognition.stop(); document.getElementById("audioStatus").textContent="Hazır değil"; document.getElementById("speechStatus").textContent="Hazır değil"; document.getElementById("reviewStatus").textContent="Hazır değil"; clearReviewCanvas(); updateSummary(); setStatus("Veriler temizlendi.");}
+    function resetData(){if(!confirm("Tüm kayıtlı veriler silinsin mi?"))return; hideCompletionNotice(); gazeData=[]; fixationData=[]; transitions=[]; reviewGaze=[]; reviewFixations=[]; completedTaskSessions=[]; isBatchRunning=false; stepCount=0; startTime=null; endTime=null; previousAOI=null; previousGrid=null; lastRecordedAt=0; audioChunks=[]; audioBlob=null; audioUrl=null; transcriptText=""; if(speechRecognition&&isSpeechRecognitionRunning)speechRecognition.stop(); document.getElementById("audioStatus").textContent="Hazır değil"; document.getElementById("speechStatus").textContent="Hazır değil"; document.getElementById("reviewStatus").textContent="Hazır değil"; clearReviewCanvas(); updateSummary(); setStatus("Veriler temizlendi.");}
 
     window.addEventListener("resize",()=>{if(document.getElementById("reviewOverlay").style.display==="block")resizeReviewCanvas();});
     window.addEventListener("DOMContentLoaded",()=>{try{initTasks();}catch(e){console.error(e);alert("Görevler yüklenemedi. F12 > Console bölümündeki hatayı kontrol edin.");}});
