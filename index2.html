@@ -59,6 +59,13 @@
     #instructionBox h2 { margin-top: 0; font-size: 30px; }
     #instructionText { font-size: 24px; line-height: 1.55; }
     #instructionCountdown { margin-top: 24px; font-weight: bold; font-size: 22px; color: #2d6cdf; }
+    #instructionSkipButton { position: fixed; right: 34px; bottom: 30px; padding: 12px 24px; font-size: 17px; background: #16803c; }
+    #instructionSkipButton:hover { background: #0f642e; }
+    .atom-description { background: #f0f6ff; border-left: 6px solid #2d6cdf; border-radius: 8px; padding: 16px 18px; font-size: 16px; line-height: 1.55; color: #1f2937; }
+    .atom-description h3 { margin: 0 0 10px 0; color: #174fa8; font-size: 20px; }
+    .atom-description p { margin: 8px 0; }
+    .atom-tag { display: inline-block; background: #e8eefc; color: #174fa8; border-radius: 999px; padding: 5px 10px; font-size: 13px; font-weight: bold; margin-bottom: 10px; }
+    button:disabled { background: #b8b8b8 !important; color: #f3f3f3; cursor: not-allowed; }
     #progressOverlay { position: fixed; inset: 0; display: none; z-index: 10005; background: rgba(255,255,255,0.92); align-items: center; justify-content: center; }
     #progressBox { width: min(720px, 86vw); background: #fff; border: 4px solid #222; border-radius: 18px; padding: 30px 36px; box-shadow: 0 8px 28px rgba(0,0,0,0.22); }
     #progressTitle { font-size: 24px; font-weight: bold; margin-bottom: 12px; }
@@ -112,9 +119,9 @@
       <p><strong>Yönerge:</strong> Lütfen kodu çalıştırmadan okuyunuz. Kodun ekrana hangi çıktıyı vereceğini tahmin ediniz. Düşünme sürecinizi yüksek sesle açıklayınız.</p>
 
       <div id="experimentArea">
-        <div class="aoi" data-aoi="Kod Alanı">
-          <div class="aoi-title">AOI 1: Kod Alanı</div>
-          <pre id="codeBlock"></pre>
+        <div class="aoi" data-aoi="Kod Atomu Açıklaması">
+          <div class="aoi-title">AOI 1: Kod Atomu Açıklaması</div>
+          <div id="atomDescription" class="atom-description"></div>
         </div>
 
         <div>
@@ -166,6 +173,7 @@
       <h2 id="instructionTitle">Yönerge</h2>
       <div id="instructionText"></div>
       <div id="instructionCountdown"></div>
+      <button id="instructionSkipButton" type="button">İlerle</button>
     </div>
   </div>
 
@@ -190,18 +198,90 @@
 
   <script>
     const tasks = [
-      { title: "Görev 1 - Atama ve Güncelleme", atom: "Assignment / Variable Update", prompt: "Aşağıdaki Python kodunun çıktısı ne olur? Satır numaralarını kullanarak sesli açıklayınız.", code: ["x = 4", "y = x", "x = x + 3", "print(x, y)"] },
-      { title: "Görev 2 - Koşullu İfade", atom: "Conditional Expression", prompt: "Koşullu ifadeyi takip ederek çıktıyı tahmin ediniz.", code: ["score = 65", "result = 'pass' if score >= 60 else 'fail'", "print(result)"] },
-      { title: "Görev 3 - Mantıksal Kısa Devre", atom: "Logic as Control Flow / Short-Circuit", prompt: "and ifadesinin ikinci kısmının çalışıp çalışmayacağını düşünerek çıktıyı tahmin ediniz.", code: ["x = 0", "y = 5", "result = x != 0 and y / x > 1", "print(result)"] },
-      { title: "Görev 4 - Zincirli Karşılaştırma", atom: "Implicit Predicate / Chained Comparison", prompt: "Python’daki zincirli karşılaştırma yapısını dikkate alarak çıktıyı tahmin ediniz.", code: ["a = 3", "b = 5", "c = 4", "print(a < b > c)"] },
-      { title: "Görev 5 - Liste, For Loop ve Range", atom: "Indexing / For Loop / Range", prompt: "Liste indeksleri ile range başlangıç değerini birlikte takip ederek çıktıyı tahmin ediniz.", code: ["numbers = [10, 20, 30, 40]", "for i in range(1, 3):", "    print(numbers[i])"] },
-      { title: "Görev 6 - Negatif İndeks", atom: "Negative Indexing", prompt: "Negatif indeksin hangi elemana karşılık geldiğini açıklayarak çıktıyı tahmin ediniz.", code: ["letters = ['a', 'b', 'c', 'd']", "print(letters[-1])", "print(letters[-3])"] },
-      { title: "Görev 7 - Negatif İndekslerle Dilimleme", atom: "Negative Indexing / Slicing", prompt: "Negatif indekslerle yapılan dilimlemeyi takip ederek çıktıyı tahmin ediniz.", code: ["word = 'PYTHON'", "part = word[-5:-2]", "print(part)"] },
-      { title: "Görev 8 - Döngüde Resetlenen Değişken", atom: "Loop Accumulation / Reset", prompt: "total değişkeninin döngü içinde yeniden atanmasını dikkate alarak çıktıyı tahmin ediniz.", code: ["for i in range(1, 4):", "    total = 0", "    total = total + i", "print(total)"] },
-      { title: "Görev 9 - İç İçe Koşul", atom: "Nested Condition", prompt: "Girintileri ve koşul akışını takip ederek çıktıyı tahmin ediniz.", code: ["x = 7", "if x > 5:", "    if x % 2 == 0:", "        print('A')", "    else:", "        print('B')", "else:", "    print('C')"] },
-      { title: "Görev 10 - Fonksiyon ve Dönüş Değeri", atom: "Function Return", prompt: "Fonksiyonun hangi değeri döndürdüğünü takip ederek çıktıyı tahmin ediniz.", code: ["def add_one(n):", "    n = n + 1", "    return n", "x = 4", "y = add_one(x)", "print(x, y)"] },
-      { title: "Görev 11 - Liste Referansı", atom: "Aliasing / Reference", prompt: "a ve b listelerinin aynı nesneyi gösterip göstermediğini düşünerek çıktıyı tahmin ediniz.", code: ["a = [1, 2]", "b = a", "b.append(3)", "print(a)"] },
-      { title: "Görev 12 - Varsayılan Parametre", atom: "Default Mutable Argument", prompt: "Fonksiyon iki kez çağrıldığında liste içeriğinin nasıl değiştiğini sesli açıklayınız.", code: ["def add_item(x, items=[]):", "    items.append(x)", "    return items", "print(add_item(1))", "print(add_item(2))"] }
+      {
+        title: "Görev 1 - Atama ve Güncelleme",
+        atom: "Assignment / Variable Update",
+        prompt: "Aşağıdaki Python kodunun çıktısı ne olur? Satır numaralarını kullanarak sesli açıklayınız.",
+        atomDescription: "Atama ve değişken güncelleme örüntüsünde bir değişkenin değeri başka bir değişkene aktarılır ve daha sonra ilk değişken değiştirilebilir. İnceleme sırasında hangi satırda hangi değişkenin hangi değeri tuttuğunu ayrı ayrı izleyiniz. Bu tür küçük kod örüntüleri, kaynak kodun yanlış anlaşılmasına yol açabilen atoms of confusion yaklaşımıyla ilişkilidir.",
+        code: ["x = 4", "y = x", "x = x + 3", "print(x, y)"]
+      },
+      {
+        title: "Görev 2 - Koşullu İfade",
+        atom: "Conditional Expression",
+        prompt: "Koşullu ifadeyi takip ederek çıktıyı tahmin ediniz.",
+        atomDescription: "Koşullu ifade örüntüsünde tek satırda hem koşul hem de koşula göre seçilecek değer bulunur. Okuyucu önce koşulun doğru mu yanlış mı olduğunu, sonra hangi değerin seçileceğini belirlemelidir. Bu sıkıştırılmış yapı, özellikle hızlı okuma sırasında yanlış çıktı tahminine neden olabilir.",
+        code: ["score = 65", "result = 'pass' if score >= 60 else 'fail'", "print(result)"]
+      },
+      {
+        title: "Görev 3 - Mantıksal Kısa Devre",
+        atom: "Logic as Control Flow / Short-Circuit",
+        prompt: "and ifadesinin ikinci kısmının çalışıp çalışmayacağını düşünerek çıktıyı tahmin ediniz.",
+        atomDescription: "Logic as control flow örüntüsünde mantıksal işleçler yalnızca doğru/yanlış üretmek için değil, program akışını kontrol etmek için de etkili olabilir. Kısa devre değerlendirme nedeniyle ikinci ifade her zaman çalışmayabilir. Bu nedenle önce ilk koşulun sonucu, sonra ikinci ifadenin değerlendirilip değerlendirilmeyeceği izlenmelidir.",
+        code: ["x = 0", "y = 5", "result = x != 0 and y / x > 1", "print(result)"]
+      },
+      {
+        title: "Görev 4 - Zincirli Karşılaştırma",
+        atom: "Implicit Predicate / Chained Comparison",
+        prompt: "Python’daki zincirli karşılaştırma yapısını dikkate alarak çıktıyı tahmin ediniz.",
+        atomDescription: "Implicit predicate ve zincirli karşılaştırma örüntüsünde ifade, açıkça ayrı ayrı yazılmamış birden fazla karşılaştırmayı içerir. Değerlendirme yapılırken ortadaki değişkenin iki karşılaştırmada da rol aldığı unutulmamalıdır. Bu yapı kısa görünür fakat zihinsel izleme gerektirir.",
+        code: ["a = 3", "b = 5", "c = 4", "print(a < b > c)"]
+      },
+      {
+        title: "Görev 5 - Liste, For Loop ve Range",
+        atom: "Indexing / For Loop / Range",
+        prompt: "Liste indeksleri ile range başlangıç değerini birlikte takip ederek çıktıyı tahmin ediniz.",
+        atomDescription: "İndeksleme ve range örüntüsünde öğrenciler çoğu zaman range başlangıç değerini listedeki birinci elemanla karıştırabilir. Python listelerinde indeksleme 0’dan başlar; range(1, ...) ise i değişkenini 1’den başlatır. Bu nedenle döngüde üretilen i değerleri ile listedeki gerçek eleman konumları ayrı ayrı takip edilmelidir.",
+        code: ["numbers = [10, 20, 30, 40]", "for i in range(1, 3):", "    print(numbers[i])"]
+      },
+      {
+        title: "Görev 6 - Negatif İndeks",
+        atom: "Negative Indexing",
+        prompt: "Negatif indeksin hangi elemana karşılık geldiğini açıklayarak çıktıyı tahmin ediniz.",
+        atomDescription: "Negatif indeksleme örüntüsünde indeksler listenin sonundan geriye doğru çalışır. -1 son elemanı, -2 sondan ikinci elemanı gösterir. Bu yapı kısa ve kullanışlıdır; ancak indeks yönünü yanlış yorumlamak çıktı tahminini değiştirebilir.",
+        code: ["letters = ['a', 'b', 'c', 'd']", "print(letters[-1])", "print(letters[-3])"]
+      },
+      {
+        title: "Görev 7 - Negatif İndekslerle Dilimleme",
+        atom: "Negative Indexing / Slicing",
+        prompt: "Negatif indekslerle yapılan dilimlemeyi takip ederek çıktıyı tahmin ediniz.",
+        atomDescription: "Slicing örüntüsünde başlangıç ve bitiş sınırları birlikte değerlendirilir; bitiş sınırı sonuca dahil edilmez. Negatif indeksler kullanıldığında bu sınırları zihinde konumlandırmak daha zor hale gelir. Bu nedenle önce karakterlerin indeks konumlarını, ardından dilimlemenin hangi aralığı aldığını belirleyiniz.",
+        code: ["word = 'PYTHON'", "part = word[-5:-2]", "print(part)"]
+      },
+      {
+        title: "Görev 8 - Döngüde Resetlenen Değişken",
+        atom: "Loop Accumulation / Reset",
+        prompt: "total değişkeninin döngü içinde yeniden atanmasını dikkate alarak çıktıyı tahmin ediniz.",
+        atomDescription: "Loop accumulation örüntüsünde bir değişkenin döngü boyunca birikimli artması beklenebilir. Ancak değişken döngünün içinde yeniden 0 yapılırsa önceki adımların etkisi silinir. Bu nedenle değişkenin nerede başlatıldığı ve her döngü adımında sıfırlanıp sıfırlanmadığı dikkatle izlenmelidir.",
+        code: ["for i in range(1, 4):", "    total = 0", "    total = total + i", "print(total)"]
+      },
+      {
+        title: "Görev 9 - İç İçe Koşul",
+        atom: "Nested Condition",
+        prompt: "Girintileri ve koşul akışını takip ederek çıktıyı tahmin ediniz.",
+        atomDescription: "İç içe koşul örüntüsünde bir koşulun sonucu, başka bir koşulun değerlendirilip değerlendirilmeyeceğini belirler. Girintiler hangi bloğun hangi koşula ait olduğunu gösterir. Yanlış blok eşleştirmesi, özellikle else satırlarında hatalı çıktı tahminine neden olabilir.",
+        code: ["x = 7", "if x > 5:", "    if x % 2 == 0:", "        print('A')", "    else:", "        print('B')", "else:", "    print('C')"]
+      },
+      {
+        title: "Görev 10 - Fonksiyon ve Dönüş Değeri",
+        atom: "Function Return",
+        prompt: "Fonksiyonun hangi değeri döndürdüğünü takip ederek çıktıyı tahmin ediniz.",
+        atomDescription: "Fonksiyon dönüş değeri örüntüsünde fonksiyon içindeki yerel değişiklik ile fonksiyon dışındaki değişkenin değeri karıştırılabilir. Fonksiyon çağrısı sırasında parametreye aktarılan değer, fonksiyon içinde işlenir ve return ile dışarıya yeni bir değer döndürülür. Bu nedenle fonksiyon içi ve dışı değişken durumları ayrı izlenmelidir.",
+        code: ["def add_one(n):", "    n = n + 1", "    return n", "x = 4", "y = add_one(x)", "print(x, y)"]
+      },
+      {
+        title: "Görev 11 - Liste Referansı",
+        atom: "Aliasing / Reference",
+        prompt: "a ve b listelerinin aynı nesneyi gösterip göstermediğini düşünerek çıktıyı tahmin ediniz.",
+        atomDescription: "Aliasing / reference örüntüsünde iki değişken aynı liste nesnesini gösterebilir. Bu durumda bir değişken üzerinden yapılan değişiklik diğer değişkenle erişildiğinde de görünür. Değişken adları farklı olsa bile nesnenin ortak olup olmadığı kontrol edilmelidir.",
+        code: ["a = [1, 2]", "b = a", "b.append(3)", "print(a)"]
+      },
+      {
+        title: "Görev 12 - Varsayılan Parametre",
+        atom: "Default Mutable Argument",
+        prompt: "Fonksiyon iki kez çağrıldığında liste içeriğinin nasıl değiştiğini sesli açıklayınız.",
+        atomDescription: "Varsayılan değiştirilebilir parametre örüntüsünde varsayılan liste her fonksiyon çağrısında yeniden oluşturulmayabilir; aynı liste nesnesi sonraki çağrılarda da kullanılabilir. Bu durum özellikle append gibi listeyi değiştiren işlemlerde beklenmeyen birikmeye yol açabilir. Çağrılar arasındaki nesne sürekliliğine dikkat ediniz.",
+        code: ["def add_item(x, items=[]):", "    items.append(x)", "    return items", "print(add_item(1))", "print(add_item(2))"]
+      }
     ];
 
     let currentTaskIndex = 0, isTrackerRunning = false, isCalibrated = false, isRecording = false, isReviewMode = false;
@@ -248,7 +328,16 @@
       if(statusEl) statusEl.textContent = "Bu görevin çıktı tahmini gönderilmeden rapor ve veri indirme butonları aktif olmayacaktır.";
       const submitBtn = document.getElementById("submitAnswerButton"); if(submitBtn) submitBtn.disabled = true;
       const startBtn = document.getElementById("startRecordingButton"); if(startBtn) startBtn.disabled = isBatchRunning;
-      renderCode(document.getElementById("codeBlock"), task.code); setStatus(`${task.title} yüklendi.`);
+      renderAtomDescription(document.getElementById("atomDescription"), task); setStatus(`${task.title} yüklendi.`);
+    }
+    function renderAtomDescription(container, task) {
+      if(!container) return;
+      container.innerHTML = `
+        <span class="atom-tag">${task.atom}</span>
+        <h3>${task.title}</h3>
+        <p>${task.atomDescription || "Bu görevde ilgili kod örüntüsünü dikkatle izleyerek çıktıyı tahmin ediniz."}</p>
+        <p class="small"><strong>Not:</strong> Kod satırları bu alanda gösterilmez; kod, kayıt sırasında tam ekran inceleme modunda sunulur.</p>
+      `;
     }
     function renderCode(container, lines) {
       container.innerHTML = "";
@@ -326,20 +415,30 @@
       const titleEl=document.getElementById("instructionTitle");
       const textEl=document.getElementById("instructionText");
       const counter=document.getElementById("instructionCountdown");
+      const skipBtn=document.getElementById("instructionSkipButton");
       titleEl.textContent=title;
       textEl.textContent=text;
       overlay.style.display="flex";
       let remaining=seconds;
-      counter.textContent=`${remaining} sn sonra devam edilecektir.`;
+      let resolved=false;
+      counter.textContent=`${remaining} sn sonra devam edilecektir. Dilerseniz İlerle butonu ile yönergeyi geçebilirsiniz.`;
       if(instructionTimerId) clearInterval(instructionTimerId);
       await new Promise(resolve=>{
+        const finish=()=>{
+          if(resolved) return;
+          resolved=true;
+          if(instructionTimerId){ clearInterval(instructionTimerId); instructionTimerId=null; }
+          if(skipBtn) skipBtn.onclick=null;
+          overlay.style.display="none";
+          resolve();
+        };
+        if(skipBtn) skipBtn.onclick=finish;
         instructionTimerId=setInterval(()=>{
           remaining--;
-          counter.textContent=remaining>0 ? `${remaining} sn sonra devam edilecektir.` : "Devam ediliyor...";
-          if(remaining<=0){ clearInterval(instructionTimerId); instructionTimerId=null; resolve(); }
+          counter.textContent=remaining>0 ? `${remaining} sn sonra devam edilecektir. Dilerseniz İlerle butonu ile yönergeyi geçebilirsiniz.` : "Devam ediliyor...";
+          if(remaining<=0) finish();
         },1000);
       });
-      overlay.style.display="none";
     }
 
     async function startRecording(){
