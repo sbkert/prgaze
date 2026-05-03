@@ -37,20 +37,7 @@
     th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
     th { background: #eeeeee; }
 
-    #videoBox {
-
-
-       position: fixed;
-  left: 50%;
-  top: 12px;
-  transform: translateX(-50%);
-  width: 250px;
-  height: 190px;
-  z-index: 9995;
-  border: 3px solid #111;
-  background: #000;
-  overflow: hidden;
-    }
+    #videoBox { position: fixed; right: 12px; top: 60px; width: 250px; height: 190px; z-index: 9995; border: 3px solid #111; background: #000; overflow: hidden; }
     #inputVideo { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
     #faceCanvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform: scaleX(-1); pointer-events: none; }
     #gazeDot { position: fixed; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.88); border-radius: 50%; pointer-events: none; z-index: 10004; display: none; transform: translate(-50%, -50%); box-shadow: 0 0 0 7px rgba(255,0,0,0.16); }
@@ -230,84 +217,108 @@
         atom: "Assignment / Variable Update",
         prompt: "Aşağıdaki Python kodunun çıktısı ne olur? Satır numaralarını kullanarak sesli açıklayınız.",
         atomDescription: "Atama ve değişken güncelleme örüntüsünde bir değişkenin değeri başka bir değişkene aktarılır ve daha sonra ilk değişken değiştirilebilir. İnceleme sırasında hangi satırda hangi değişkenin hangi değeri tuttuğunu ayrı ayrı izleyiniz. Bu tür küçük kod örüntüleri, kaynak kodun yanlış anlaşılmasına yol açabilen atoms of confusion yaklaşımıyla ilişkilidir.",
-        code: ["x = 4", "y = x", "x = x + 3", "print(x, y)"]
+        code: ["x = 4", "y = x", "x = x + 3", "print(x, y)"],
+        correctAnswer: "7 4",
+        correctAnswerAliases: ["7 4", "7, 4", "(7, 4)"]
       },
       {
         title: "Görev 2 - Koşullu İfade",
         atom: "Conditional Expression",
         prompt: "Koşullu ifadeyi takip ederek çıktıyı tahmin ediniz.",
         atomDescription: "Koşullu ifade örüntüsünde tek satırda hem koşul hem de koşula göre seçilecek değer bulunur. Okuyucu önce koşulun doğru mu yanlış mı olduğunu, sonra hangi değerin seçileceğini belirlemelidir. Bu sıkıştırılmış yapı, özellikle hızlı okuma sırasında yanlış çıktı tahminine neden olabilir.",
-        code: ["score = 65", "result = ('pass' if score >= 60", "          else 'fail')", "print(result)"]
+        code: ["score = 65", "result = ('pass' if score >= 60", "          else 'fail')", "print(result)"],
+        correctAnswer: "pass",
+        correctAnswerAliases: ["pass", "'pass'", "\"pass\""]
       },
       {
         title: "Görev 3 - Mantıksal Kısa Devre",
         atom: "Logic as Control Flow / Short-Circuit",
         prompt: "and ifadesinin ikinci kısmının çalışıp çalışmayacağını düşünerek çıktıyı tahmin ediniz.",
         atomDescription: "Logic as control flow örüntüsünde mantıksal işleçler yalnızca doğru/yanlış üretmek için değil, program akışını kontrol etmek için de etkili olabilir. Kısa devre değerlendirme nedeniyle ikinci ifade her zaman çalışmayabilir. Bu nedenle önce ilk koşulun sonucu, sonra ikinci ifadenin değerlendirilip değerlendirilmeyeceği izlenmelidir.",
-        code: ["x = 0", "y = 5", "result = x != 0 and y / x > 1", "print(result)"]
+        code: ["x = 0", "y = 5", "result = x != 0 and y / x > 1", "print(result)"],
+        correctAnswer: "False",
+        correctAnswerAliases: ["False", "false"]
       },
       {
         title: "Görev 4 - Zincirli Karşılaştırma",
         atom: "Implicit Predicate / Chained Comparison",
         prompt: "Python’daki zincirli karşılaştırma yapısını dikkate alarak çıktıyı tahmin ediniz.",
         atomDescription: "Implicit predicate ve zincirli karşılaştırma örüntüsünde ifade, açıkça ayrı ayrı yazılmamış birden fazla karşılaştırmayı içerir. Değerlendirme yapılırken ortadaki değişkenin iki karşılaştırmada da rol aldığı unutulmamalıdır. Bu yapı kısa görünür fakat zihinsel izleme gerektirir.",
-        code: ["a = 3", "b = 5", "c = 4", "print(a < b > c)"]
+        code: ["a = 3", "b = 5", "c = 4", "print(a < b > c)"],
+        correctAnswer: "True",
+        correctAnswerAliases: ["True", "true"]
       },
       {
         title: "Görev 5 - Liste, For Loop ve Range",
         atom: "Indexing / For Loop / Range",
         prompt: "Liste indeksleri ile range başlangıç değerini birlikte takip ederek çıktıyı tahmin ediniz.",
         atomDescription: "İndeksleme ve range örüntüsünde öğrenciler çoğu zaman range başlangıç değerini listedeki birinci elemanla karıştırabilir. Python listelerinde indeksleme 0’dan başlar; range(1, ...) ise i değişkenini 1’den başlatır. Bu nedenle döngüde üretilen i değerleri ile listedeki gerçek eleman konumları ayrı ayrı takip edilmelidir.",
-        code: ["numbers = [10, 20, 30, 40]", "for i in range(1, 3):", "    print(numbers[i])"]
+        code: ["numbers = [10, 20, 30, 40]", "for i in range(1, 3):", "    print(numbers[i])"],
+        correctAnswer: "20\n30",
+        correctAnswerAliases: ["20\n30", "20 30", "20, 30"]
       },
       {
         title: "Görev 6 - Negatif İndeks",
         atom: "Negative Indexing",
         prompt: "Negatif indeksin hangi elemana karşılık geldiğini açıklayarak çıktıyı tahmin ediniz.",
         atomDescription: "Negatif indeksleme örüntüsünde indeksler listenin sonundan geriye doğru çalışır. -1 son elemanı, -2 sondan ikinci elemanı gösterir. Bu yapı kısa ve kullanışlıdır; ancak indeks yönünü yanlış yorumlamak çıktı tahminini değiştirebilir.",
-        code: ["letters = ['a', 'b', 'c', 'd']", "print(letters[-1])", "print(letters[-3])"]
+        code: ["letters = ['a', 'b', 'c', 'd']", "print(letters[-1])", "print(letters[-3])"],
+        correctAnswer: "d\nb",
+        correctAnswerAliases: ["d\nb", "d b", "d, b", "'d' 'b'"]
       },
       {
         title: "Görev 7 - Negatif İndekslerle Dilimleme",
         atom: "Negative Indexing / Slicing",
         prompt: "Negatif indekslerle yapılan dilimlemeyi takip ederek çıktıyı tahmin ediniz.",
         atomDescription: "Slicing örüntüsünde başlangıç ve bitiş sınırları birlikte değerlendirilir; bitiş sınırı sonuca dahil edilmez. Negatif indeksler kullanıldığında bu sınırları zihinde konumlandırmak daha zor hale gelir. Bu nedenle önce karakterlerin indeks konumlarını, ardından dilimlemenin hangi aralığı aldığını belirleyiniz.",
-        code: ["word = 'PYTHON'", "part = word[-5:-2]", "print(part)"]
+        code: ["word = 'PYTHON'", "part = word[-5:-2]", "print(part)"],
+        correctAnswer: "YTH",
+        correctAnswerAliases: ["YTH", "yth", "'YTH'", "\"YTH\""]
       },
       {
         title: "Görev 8 - Döngüde Resetlenen Değişken",
         atom: "Loop Accumulation / Reset",
         prompt: "total değişkeninin döngü içinde yeniden atanmasını dikkate alarak çıktıyı tahmin ediniz.",
         atomDescription: "Loop accumulation örüntüsünde bir değişkenin döngü boyunca birikimli artması beklenebilir. Ancak değişken döngünün içinde yeniden 0 yapılırsa önceki adımların etkisi silinir. Bu nedenle değişkenin nerede başlatıldığı ve her döngü adımında sıfırlanıp sıfırlanmadığı dikkatle izlenmelidir.",
-        code: ["for i in range(1, 4):", "    total = 0", "    total = total + i", "print(total)"]
+        code: ["for i in range(1, 4):", "    total = 0", "    total = total + i", "print(total)"],
+        correctAnswer: "3",
+        correctAnswerAliases: ["3"]
       },
       {
         title: "Görev 9 - İç İçe Koşul",
         atom: "Nested Condition",
         prompt: "Girintileri ve koşul akışını takip ederek çıktıyı tahmin ediniz.",
         atomDescription: "İç içe koşul örüntüsünde bir koşulun sonucu, başka bir koşulun değerlendirilip değerlendirilmeyeceğini belirler. Girintiler hangi bloğun hangi koşula ait olduğunu gösterir. Yanlış blok eşleştirmesi, özellikle else satırlarında hatalı çıktı tahminine neden olabilir.",
-        code: ["x = 7", "if x > 5:", "    if x % 2 == 0:", "        print('A')", "    else:", "        print('B')", "else:", "    print('C')"]
+        code: ["x = 7", "if x > 5:", "    if x % 2 == 0:", "        print('A')", "    else:", "        print('B')", "else:", "    print('C')"],
+        correctAnswer: "B",
+        correctAnswerAliases: ["B", "b", "'B'", "\"B\""]
       },
       {
         title: "Görev 10 - Fonksiyon ve Dönüş Değeri",
         atom: "Function Return",
         prompt: "Fonksiyonun hangi değeri döndürdüğünü takip ederek çıktıyı tahmin ediniz.",
         atomDescription: "Fonksiyon dönüş değeri örüntüsünde fonksiyon içindeki yerel değişiklik ile fonksiyon dışındaki değişkenin değeri karıştırılabilir. Fonksiyon çağrısı sırasında parametreye aktarılan değer, fonksiyon içinde işlenir ve return ile dışarıya yeni bir değer döndürülür. Bu nedenle fonksiyon içi ve dışı değişken durumları ayrı izlenmelidir.",
-        code: ["def add_one(n):", "    n = n + 1", "    return n", "x = 4", "y = add_one(x)", "print(x, y)"]
+        code: ["def add_one(n):", "    n = n + 1", "    return n", "x = 4", "y = add_one(x)", "print(x, y)"],
+        correctAnswer: "4 5",
+        correctAnswerAliases: ["4 5", "4, 5", "(4, 5)"]
       },
       {
         title: "Görev 11 - Liste Referansı",
         atom: "Aliasing / Reference",
         prompt: "a ve b listelerinin aynı nesneyi gösterip göstermediğini düşünerek çıktıyı tahmin ediniz.",
         atomDescription: "Aliasing / reference örüntüsünde iki değişken aynı liste nesnesini gösterebilir. Bu durumda bir değişken üzerinden yapılan değişiklik diğer değişkenle erişildiğinde de görünür. Değişken adları farklı olsa bile nesnenin ortak olup olmadığı kontrol edilmelidir.",
-        code: ["a = [1, 2]", "b = a", "b.append(3)", "print(a)"]
+        code: ["a = [1, 2]", "b = a", "b.append(3)", "print(a)"],
+        correctAnswer: "[1, 2, 3]",
+        correctAnswerAliases: ["[1, 2, 3]", "[1,2,3]"]
       },
       {
         title: "Görev 12 - Varsayılan Parametre",
         atom: "Default Mutable Argument",
         prompt: "Fonksiyon iki kez çağrıldığında liste içeriğinin nasıl değiştiğini sesli açıklayınız.",
         atomDescription: "Varsayılan değiştirilebilir parametre örüntüsünde varsayılan liste her fonksiyon çağrısında yeniden oluşturulmayabilir; aynı liste nesnesi sonraki çağrılarda da kullanılabilir. Bu durum özellikle append gibi listeyi değiştiren işlemlerde beklenmeyen birikmeye yol açabilir. Çağrılar arasındaki nesne sürekliliğine dikkat ediniz.",
-        code: ["def add_item(x, items=[]):", "    items.append(x)", "    return items", "print(add_item(1))", "print(add_item(2))"]
+        code: ["def add_item(x, items=[]):", "    items.append(x)", "    return items", "print(add_item(1))", "print(add_item(2))"],
+        correctAnswer: "[1]\n[1, 2]",
+        correctAnswerAliases: ["[1]\n[1, 2]", "[1] [1, 2]", "[1] [1,2]"]
       }
     ];
 
@@ -635,6 +646,8 @@
         taskIndex: currentTaskIndex,
         task: JSON.parse(JSON.stringify(task)),
         answerText: answer,
+        correctAnswer: task.correctAnswer || "",
+        answerCorrect: isAnswerCorrect(answer, task),
         gazeData: cloneRows(gazeData),
         fixationData: cloneRows(fixationData),
         transitions: cloneRows(transitions),
@@ -728,10 +741,10 @@
         (session.gazeData||[]).forEach(d=>{const key=`${d.taskNo}_${d.aoi}`; if(!grouped[key])grouped[key]=[]; grouped[key].push(d);});
         Object.keys(grouped).forEach(key=>{
           const aoiRows=grouped[key], first=aoiRows[0], aoiFix=(session.fixationData||[]).filter(f=>f.taskNo===first.taskNo&&f.aoi===first.aoi);
-          rows.push({participantId:session.participantId,taskNo:first.taskNo,taskName:first.taskName,atomType:first.atomType,completionTimeSec:session.completionTimeSec,stepCount:session.stepCount,totalGazeSamples:(session.gazeData||[]).length,totalFixationCount:(session.fixationData||[]).length,totalTransitionCount:(session.transitions||[]).length,submittedAnswerText:session.answerText,aoi:first.aoi,aoiGazeCount:aoiRows.length,aoiDwellTimeMs:aoiRows.length*sampleIntervalMs,aoiFixationCount:aoiFix.length,aoiMeanFixationDurationMs:aoiFix.length?Math.round(aoiFix.reduce((s,f)=>s+f.durationMs,0)/aoiFix.length):0});
+          rows.push({participantId:session.participantId,taskNo:first.taskNo,taskName:first.taskName,atomType:first.atomType,completionTimeSec:session.completionTimeSec,stepCount:session.stepCount,totalGazeSamples:(session.gazeData||[]).length,totalFixationCount:(session.fixationData||[]).length,totalTransitionCount:(session.transitions||[]).length,submittedAnswerText:session.answerText,correctAnswer:getCorrectAnswerText(session.task),answerCorrect:isAnswerCorrect(session.answerText, session.task)?"DOGRU":"YANLIS",aoi:first.aoi,aoiGazeCount:aoiRows.length,aoiDwellTimeMs:aoiRows.length*sampleIntervalMs,aoiFixationCount:aoiFix.length,aoiMeanFixationDurationMs:aoiFix.length?Math.round(aoiFix.reduce((s,f)=>s+f.durationMs,0)/aoiFix.length):0});
         });
       });
-      csvDownload(rows,["participantId","taskNo","taskName","atomType","completionTimeSec","stepCount","totalGazeSamples","totalFixationCount","totalTransitionCount","submittedAnswerText","aoi","aoiGazeCount","aoiDwellTimeMs","aoiFixationCount","aoiMeanFixationDurationMs"],"all_tasks_summary_efficiency_aoi_python_tasks.csv");
+      csvDownload(rows,["participantId","taskNo","taskName","atomType","completionTimeSec","stepCount","totalGazeSamples","totalFixationCount","totalTransitionCount","submittedAnswerText","correctAnswer","answerCorrect","aoi","aoiGazeCount","aoiDwellTimeMs","aoiFixationCount","aoiMeanFixationDurationMs"],"all_tasks_summary_efficiency_aoi_python_tasks.csv");
     }
     function buildReviewReportImageDataUrl(layer="combined", session=null){
       return buildReviewVisualizationDataUrl(layer, session);
@@ -921,6 +934,36 @@
       return submittedAnswerText || (document.getElementById("answer").value || "").trim() || "Öğrenci çıktı tahmini henüz gönderilmedi.";
     }
 
+
+    function normalizeAnswer(ans){
+      return String(ans ?? "")
+        .toLowerCase()
+        .replace(/ı/g,"i").replace(/İ/g,"i")
+        .replace(/ğ/g,"g").replace(/ü/g,"u").replace(/ş/g,"s").replace(/ö/g,"o").replace(/ç/g,"c")
+        .replace(/[“”]/g,'"').replace(/[‘’]/g,"'")
+        .replace(/\r/g,"")
+        .replace(/\s*,\s*/g,",")
+        .replace(/\[\s*/g,"[").replace(/\s*\]/g,"]")
+        .replace(/\(\s*/g,"(").replace(/\s*\)/g,")")
+        .replace(/[ \t]+/g," ")
+        .replace(/\n+/g," ")
+        .trim();
+    }
+
+    function isAnswerCorrect(studentAnswer, task){
+      const expected=[task.correctAnswer, ...(task.correctAnswerAliases || [])].filter(Boolean);
+      const student=normalizeAnswer(studentAnswer);
+      return expected.some(ans => normalizeAnswer(ans) === student);
+    }
+
+    function getCorrectAnswerText(task){
+      return task.correctAnswer || "Doğru cevap tanımlanmadı";
+    }
+
+    function getAnswerStatusLabel(session){
+      return isAnswerCorrect(session.answerText, session.task) ? "DOGRU" : "YANLIS";
+    }
+
     function getGridDwellStats(session=null){
       const rg=session ? (session.reviewGaze||[]) : reviewGaze;
       const snap=session ? (session.reviewWrapSnapshot||{width:1200,height:720}) : reviewWrapSnapshot;
@@ -1040,31 +1083,62 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
         }
         function addWrappedTextPages(title, bodyText, session){
           const marginX=14, topY=16, metaY=24, bodyStartY=34, bottomY=196, lineHeight=5.4, maxWidth=268;
-          const safeBody=pdfSafeText(bodyText || "");
-          const paragraphs=safeBody.split("\n");
+          const rawBody=String(bodyText || "");
+          const paragraphs=rawBody.split("\n");
           const lines=[];
           paragraphs.forEach((paragraph, pIndex)=>{
-            const wrapped=pdf.splitTextToSize(paragraph || " ", maxWidth);
-            wrapped.forEach(line=>lines.push(line));
-            if(pIndex < paragraphs.length-1) lines.push(" ");
+            const isRed=paragraph.startsWith("%%RED%%");
+            const cleanParagraph=pdfSafeText(isRed ? paragraph.replace("%%RED%%","") : paragraph);
+            const wrapped=pdf.splitTextToSize(cleanParagraph || " ", maxWidth);
+            wrapped.forEach(line=>lines.push({text:line, red:isRed}));
+            if(pIndex < paragraphs.length-1) lines.push({text:" ", red:false});
           });
           let index=0, pageNo=1;
           while(index < lines.length || pageNo===1){
             ensurePage();
+            pdf.setTextColor(0,0,0);
             pdf.setFontSize(16);
             pdfText(pageNo===1 ? title : `${title} (devam)`, marginX, topY);
             pdf.setFontSize(10);
             pdfText(`Katilimci: ${pid} | Gorev: ${session.taskNo} - ${session.task.title}`, marginX, metaY);
             let y=bodyStartY;
             pdf.setFontSize(10);
-            while(index < lines.length && y <= bottomY){ pdfText(lines[index], marginX, y); y += lineHeight; index++; }
+            while(index < lines.length && y <= bottomY){
+              const lineObj=lines[index];
+              if(lineObj.red) pdf.setTextColor(200,0,0); else pdf.setTextColor(0,0,0);
+              pdfText(lineObj.text, marginX, y);
+              y += lineHeight;
+              index++;
+            }
+            pdf.setTextColor(0,0,0);
             pageNo++;
           }
         }
 
+        const totalTasks = completedTaskSessions.length;
+        const correctCount = completedTaskSessions.filter(s => isAnswerCorrect(s.answerText, s.task)).length;
+        const wrongCount = totalTasks - correctCount;
+        const successRate = totalTasks > 0 ? ((correctCount / totalTasks) * 100).toFixed(1) : "0.0";
+        const summaryLines = [
+          "TOPLU OTURUM OZETI",
+          "",
+          `TOPLAM GOREV: ${totalTasks}`,
+          `DOGRU TAHMIN SAYISI: ${correctCount}`,
+          `YANLIS TAHMIN SAYISI: ${wrongCount}`,
+          `OTURUM BASARI ORANI: %${successRate}`,
+          "",
+          "--------------------------------------------------",
+          "GOREV BAZLI CIKTI TAHMIN OZETI",
+          ""
+        ];
+        completedTaskSessions.forEach(s=>{
+          const correct=isAnswerCorrect(s.answerText, s.task);
+          const prefix=correct ? "" : "%%RED%%";
+          summaryLines.push(`${prefix}Gorev ${s.taskNo}: ${s.task.title} | ${correct ? "DOGRU" : "YANLIS"} | Ogrenci: ${s.answerText} | Dogru: ${getCorrectAnswerText(s.task)} | Gaze: ${(s.reviewGaze||[]).length} | Fixation: ${(s.reviewFixations||[]).length}`);
+        });
         addWrappedTextPages(
-          "Toplu Oturum Ozeti",
-          [`Katilimci: ${pid}`, `Rapor tarihi: ${now}`, `Tamamlanan gorev sayisi: ${completedTaskSessions.length}`, "", ...completedTaskSessions.map(s=>`Gorev ${s.taskNo}: ${s.task.title} | Gaze: ${(s.reviewGaze||[]).length} | Fixation: ${(s.reviewFixations||[]).length} | Cikti tahmini: ${s.answerText}`)].join("\n"),
+          "TOPLU OTURUM OZETI VE BASARI DURUMU",
+          summaryLines.join("\n"),
           {taskNo:"-", task:{title:"Toplu Rapor"}}
         );
 
@@ -1073,7 +1147,7 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
           const progressBase=8 + Math.round((i/completedTaskSessions.length)*86);
           setPdfProgress(progressBase, `Görev ${session.taskNo} rapora ekleniyor...`);
           await waitFrame();
-          addWrappedTextPages(`Gorev ${session.taskNo} Bolum Kapagi`, [`${session.task.title}`, `Kod oruntusu: ${session.task.atom}`, `Ogrenci cikti tahmini: ${session.answerText}`, `Gaze ornegi: ${(session.reviewGaze||[]).length}`, `Fixation sayisi: ${(session.reviewFixations||[]).length}`, `Tamamlanma suresi: ${session.completionTimeSec} sn`].join("\n"), session);
+          addWrappedTextPages(`Gorev ${session.taskNo} Bolum Kapagi`, [`${session.task.title}`, `Kod oruntusu: ${session.task.atom}`, `Ogrenci cikti tahmini: ${session.answerText}`, `Dogru cevap: ${getCorrectAnswerText(session.task)}`, `Tahmin durumu: ${getAnswerStatusLabel(session)}`, `Gaze ornegi: ${(session.reviewGaze||[]).length}`, `Fixation sayisi: ${(session.reviewFixations||[]).length}`, `Tamamlanma suresi: ${session.completionTimeSec} sn`].join("\n"), session);
           addVisualPage(`Gorev ${session.taskNo} - Isi Yayilim Haritasi`, "heatmap", session);
           addWrappedTextPages(`Gorev ${session.taskNo} - Isi Yayilim Analiz Aciklamasi`, buildAnalysisText("heatmap", session), session);
           addVisualPage(`Gorev ${session.taskNo} - Grid Dwell Sureleri`, "grid", session);
@@ -1084,7 +1158,7 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
           addWrappedTextPages(`Gorev ${session.taskNo} - Fixation Point Analiz Aciklamasi`, buildAnalysisText("fixations", session), session);
           const transcriptPageText=session.transcriptText && session.transcriptText.trim() ? session.transcriptText.trim() : "Konusma metni olusmadi / kaydedilmedi.";
           addWrappedTextPages(`Gorev ${session.taskNo} - Sesli Dusunme Metni`, transcriptPageText, session);
-          const codePageText=["Kod Metni:", ...session.task.code.map((line,i)=>`${i+1}. ${line}`), "", `Ogrencinin yazdigi cikti tahmini: ${session.answerText}`, "", "Not: Grid hucrelerindeki sureler yaklasik dwell time degeridir. Webcam tabanli gaze tracking arastirma amacli yaklasik veri uretir."].join("\n");
+          const codePageText=["Kod Metni:", ...session.task.code.map((line,i)=>`${i+1}. ${line}`), "", `Ogrencinin yazdigi cikti tahmini: ${session.answerText}`, `Dogru cevap: ${getCorrectAnswerText(session.task)}`, `Tahmin durumu: ${getAnswerStatusLabel(session)}`, "", "Not: Grid hucrelerindeki sureler yaklasik dwell time degeridir. Webcam tabanli gaze tracking arastirma amacli yaklasik veri uretir."].join("\n");
           addWrappedTextPages(`Gorev ${session.taskNo} - Kod Metni ve Ogrenci Cikti Tahmini`, codePageText, session);
         }
 
