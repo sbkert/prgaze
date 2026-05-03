@@ -307,6 +307,7 @@
     let completedTaskSessions = [], isBatchRunning = false;
     let reviewTimerId = null, instructionTimerId = null;
     let reviewWrapSnapshot = { width: 1200, height: 720 };
+    let reviewCodeLayout = [];
     let startTime = null, endTime = null, stepCount = 0, previousAOI = null, previousGrid = null;
     let mediaRecorder = null, audioChunks = [], audioBlob = null, audioUrl = null;
     let speechRecognition = null, transcriptText = "", isSpeechRecognitionRunning = false;
@@ -501,12 +502,13 @@
     function startCodeReviewMode(){
       if(!isCalibrated){alert("Önce kalibrasyon yapınız."); return;}
       const task=tasks[currentTaskIndex];
-      reviewGaze=[]; reviewFixations=[]; gazeData=[]; fixationData=[]; transitions=[]; lastReviewImageDataUrl=null;
+      reviewGaze=[]; reviewFixations=[]; reviewCodeLayout=[]; gazeData=[]; fixationData=[]; transitions=[]; lastReviewImageDataUrl=null;
       isReviewMode=true; isRecording=true; lastRecordedAt=0; startTime=new Date(); endTime=null; previousAOI=null; previousGrid=null; stepCount=0;
       document.getElementById("reviewOverlay").style.display="block";
       document.getElementById("reviewTitle").textContent=`${task.title} - 15 sn Kod İnceleme`;
       renderCode(document.getElementById("reviewCode"), task.code);
       resizeReviewCanvas();
+      captureReviewCodeLayout();
       clearReviewCanvas();
       document.getElementById("reviewStatus").textContent="İnceleme sürüyor";
       let remaining=reviewDurationSec;
@@ -544,6 +546,37 @@
       c.width=wrap.clientWidth;
       c.height=wrap.clientHeight;
       reviewWrapSnapshot = { width: Math.max(1, wrap.clientWidth), height: Math.max(1, wrap.clientHeight) };
+    }
+
+    function captureReviewCodeLayout(){
+      const wrap=document.getElementById("reviewCodeWrap");
+      const wrapRect=wrap.getBoundingClientRect();
+      const rows=[...document.querySelectorAll("#reviewCode .code-line")];
+      reviewCodeLayout = rows.map((row, index)=>{
+        const no=row.querySelector(".line-no");
+        const code=row.querySelector(".line-code");
+        const rowRect=row.getBoundingClientRect();
+        const noRect=no.getBoundingClientRect();
+        const codeRect=code.getBoundingClientRect();
+        const style=window.getComputedStyle(code);
+        return {
+          index:index+1,
+          line:code.textContent || " ",
+          rowLeft:rowRect.left-wrapRect.left,
+          rowTop:rowRect.top-wrapRect.top,
+          rowWidth:rowRect.width,
+          rowHeight:rowRect.height,
+          noLeft:noRect.left-wrapRect.left,
+          noRight:noRect.right-wrapRect.left,
+          noTop:noRect.top-wrapRect.top,
+          noHeight:noRect.height,
+          codeLeft:codeRect.left-wrapRect.left,
+          codeTop:codeRect.top-wrapRect.top,
+          codeHeight:codeRect.height,
+          fontSize:parseFloat(style.fontSize)||44,
+          fontFamily:style.fontFamily || "Consolas, Monaco, monospace"
+        };
+      });
     }
     function clearReviewCanvas(){const c=document.getElementById("reviewVisualCanvas"), ctx=c.getContext("2d"); ctx.clearRect(0,0,c.width,c.height);}
     function recordGazeSample(gaze){
@@ -594,6 +627,7 @@
         reviewGaze: cloneRows(reviewGaze),
         reviewFixations: cloneRows(reviewFixations),
         reviewWrapSnapshot: {...reviewWrapSnapshot},
+        reviewCodeLayout: JSON.parse(JSON.stringify(reviewCodeLayout || [])),
         transcriptText: transcriptText,
         audioBlob: audioBlob,
         audioUrl: audioUrl,
@@ -721,6 +755,24 @@
       function drawCodeBase(){
         ctx.fillStyle="#f7f7f7";
         ctx.fillRect(0,0,cssW,cssH);
+        const layout=session ? (session.reviewCodeLayout || []) : (reviewCodeLayout || []);
+        if(layout.length){
+          ctx.textBaseline="middle";
+          layout.forEach(item=>{
+            const y=(item.codeTop + item.codeHeight/2) * sy;
+            const noX=item.noRight * sx;
+            const codeX=item.codeLeft * sx;
+            const fontSize=Math.max(18, (item.fontSize || 44) * sy);
+            ctx.font=`bold ${fontSize}px ${item.fontFamily || "Consolas, Monaco, monospace"}`;
+            ctx.fillStyle="#666";
+            ctx.textAlign="right";
+            ctx.fillText(String(item.index), noX, y);
+            ctx.fillStyle="#111";
+            ctx.textAlign="left";
+            ctx.fillText(item.line || " ", codeX, y);
+          });
+          return;
+        }
         const lines=task.code;
         const fontSize=Math.min(52, Math.max(30, Math.floor(cssH/(lines.length*1.75))));
         const lineH=fontSize*1.65;
