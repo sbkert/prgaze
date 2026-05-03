@@ -37,7 +37,7 @@
     th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
     th { background: #eeeeee; }
 
-    #videoBox { position: fixed; left: 12px; top: 60px; width: 250px; height: 190px; z-index: 9995; border: 3px solid #111; background: #000; overflow: hidden; }
+    #videoBox { position: fixed; right: 12px; top: 60px; width: 250px; height: 190px; z-index: 9995; border: 3px solid #111; background: #000; overflow: hidden; }
     #inputVideo { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
     #faceCanvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform: scaleX(-1); pointer-events: none; }
     #gazeDot { position: fixed; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.88); border-radius: 50%; pointer-events: none; z-index: 10004; display: none; transform: translate(-50%, -50%); box-shadow: 0 0 0 7px rgba(255,0,0,0.16); }
@@ -59,6 +59,12 @@
     #instructionBox h2 { margin-top: 0; font-size: 30px; }
     #instructionText { font-size: 24px; line-height: 1.55; }
     #instructionCountdown { margin-top: 24px; font-weight: bold; font-size: 22px; color: #2d6cdf; }
+    #progressOverlay { position: fixed; inset: 0; display: none; z-index: 10005; background: rgba(255,255,255,0.92); align-items: center; justify-content: center; }
+    #progressBox { width: min(720px, 86vw); background: #fff; border: 4px solid #222; border-radius: 18px; padding: 30px 36px; box-shadow: 0 8px 28px rgba(0,0,0,0.22); }
+    #progressTitle { font-size: 24px; font-weight: bold; margin-bottom: 12px; }
+    #progressText { font-size: 16px; margin-bottom: 14px; color: #333; }
+    #progressTrack { width: 100%; height: 22px; background: #e0e0e0; border-radius: 20px; overflow: hidden; }
+    #progressBar { width: 0%; height: 100%; background: #2d6cdf; transition: width 0.2s ease; }
     #submitAnswerButton { background: #16803c; margin-top: 10px; }
   </style>
 </head>
@@ -163,6 +169,14 @@
     </div>
   </div>
 
+  <div id="progressOverlay">
+    <div id="progressBox">
+      <div id="progressTitle">Rapor oluşturuluyor</div>
+      <div id="progressText">Hazırlanıyor...</div>
+      <div id="progressTrack"><div id="progressBar"></div></div>
+    </div>
+  </div>
+
   <div id="reviewOverlay">
     <div id="reviewHeader">
       <div id="reviewTitle">15 sn Kod İnceleme Modu</div>
@@ -180,10 +194,10 @@
       { title: "Görev 2 - Koşullu İfade", atom: "Conditional Expression", prompt: "Koşullu ifadeyi takip ederek çıktıyı tahmin ediniz.", code: ["score = 65", "result = 'pass' if score >= 60 else 'fail'", "print(result)"] },
       { title: "Görev 3 - Mantıksal Kısa Devre", atom: "Logic as Control Flow / Short-Circuit", prompt: "and ifadesinin ikinci kısmının çalışıp çalışmayacağını düşünerek çıktıyı tahmin ediniz.", code: ["x = 0", "y = 5", "result = x != 0 and y / x > 1", "print(result)"] },
       { title: "Görev 4 - Zincirli Karşılaştırma", atom: "Implicit Predicate / Chained Comparison", prompt: "Python’daki zincirli karşılaştırma yapısını dikkate alarak çıktıyı tahmin ediniz.", code: ["a = 3", "b = 5", "c = 4", "print(a < b > c)"] },
-      { title: "Görev 5 - Liste İndeksi", atom: "Indexing / Off-by-One Risk", prompt: "Liste indekslerini takip ederek çıktıyı tahmin ediniz.", code: ["numbers = [10, 20, 30, 40]", "i = 2", "print(numbers[i])"] },
+      { title: "Görev 5 - Liste, For Loop ve Range", atom: "Indexing / For Loop / Range", prompt: "Liste indeksleri ile range başlangıç değerini birlikte takip ederek çıktıyı tahmin ediniz.", code: ["numbers = [10, 20, 30, 40]", "for i in range(1, 3):", "    print(numbers[i])"] },
       { title: "Görev 6 - Negatif İndeks", atom: "Negative Indexing", prompt: "Negatif indeksin hangi elemana karşılık geldiğini açıklayarak çıktıyı tahmin ediniz.", code: ["letters = ['a', 'b', 'c', 'd']", "print(letters[-1])", "print(letters[-3])"] },
-      { title: "Görev 7 - Dilimleme", atom: "Slicing", prompt: "Dilimlemenin başlangıç ve bitiş indekslerini takip ederek çıktıyı tahmin ediniz.", code: ["text = 'PYTHON'", "part = text[1:4]", "print(part)"] },
-      { title: "Görev 8 - Döngüde Biriktirme", atom: "Loop Accumulation", prompt: "Her döngü adımında total değişkeninin nasıl değiştiğini sesli açıklayınız.", code: ["total = 0", "for i in range(1, 4):", "    total = total + i", "print(total)"] },
+      { title: "Görev 7 - Negatif İndekslerle Dilimleme", atom: "Negative Indexing / Slicing", prompt: "Negatif indekslerle yapılan dilimlemeyi takip ederek çıktıyı tahmin ediniz.", code: ["word = 'PYTHON'", "part = word[-5:-2]", "print(part)"] },
+      { title: "Görev 8 - Döngüde Resetlenen Değişken", atom: "Loop Accumulation / Reset", prompt: "total değişkeninin döngü içinde yeniden atanmasını dikkate alarak çıktıyı tahmin ediniz.", code: ["for i in range(1, 4):", "    total = 0", "    total = total + i", "print(total)"] },
       { title: "Görev 9 - İç İçe Koşul", atom: "Nested Condition", prompt: "Girintileri ve koşul akışını takip ederek çıktıyı tahmin ediniz.", code: ["x = 7", "if x > 5:", "    if x % 2 == 0:", "        print('A')", "    else:", "        print('B')", "else:", "    print('C')"] },
       { title: "Görev 10 - Fonksiyon ve Dönüş Değeri", atom: "Function Return", prompt: "Fonksiyonun hangi değeri döndürdüğünü takip ederek çıktıyı tahmin ediniz.", code: ["def add_one(n):", "    n = n + 1", "    return n", "x = 4", "y = add_one(x)", "print(x, y)"] },
       { title: "Görev 11 - Liste Referansı", atom: "Aliasing / Reference", prompt: "a ve b listelerinin aynı nesneyi gösterip göstermediğini düşünerek çıktıyı tahmin ediniz.", code: ["a = [1, 2]", "b = a", "b.append(3)", "print(a)"] },
@@ -345,7 +359,7 @@
       await showInstructionOverlay(
         "Kod İnceleme Yönergesi",
         "Karşınıza tam ekran olarak kod satırları gelecektir. Kod satırlarını incelemek ve çıktıyı tahmin etmek için 15 sn süreniz bulunmaktadır. İnceleme sürecinde, göz takibiniz analiz edileceğinden, ekranda kod satırlarının bulunduğu alana odaklı olarak incelemenizi yapınız. Ek olarak, ses kaydınız da alınarak problem çözme süreciniz incelenecektir. Analiz sürecinizdeki tüm düşüncelerinizi sesli olarak ifade etmeniz çalışma verimliliği için çok önemli olacaktır. Kod satırlarının kenarlarında bulunan satır numaralarını analizlerinizde hedef belirlemek için kullanabilirsiniz.",
-        20
+        25
       );
 
       await startAudioRecording();
@@ -391,7 +405,7 @@
       await showInstructionOverlay(
         "Çıktı Tahmini ve Rapor İndirme",
         `Ekranın sağ alt bölümünde bulunan "AOI 3: Cevap Alanı" na çıktı tahmininizi yazarak gönder butonuna tıklayınız. Gönder butonuna tıkladığınızda sonraki görev otomatik olarak başlayacaktır. Tüm görevler tamamlandığında oturum raporunu ve oturumun diğer çıktılarını aktif olan butonlar ile indirebilirsiniz. Katkılarınız için teşekkür ederiz.`,
-        20
+        10
       );
     }
     function resizeReviewCanvas(){
@@ -450,6 +464,8 @@
         reviewFixations: cloneRows(reviewFixations),
         reviewWrapSnapshot: {...reviewWrapSnapshot},
         transcriptText: transcriptText,
+        audioBlob: audioBlob,
+        audioUrl: audioUrl,
         startTime: startTime ? startTime.toISOString() : "",
         endTime: endTime ? endTime.toISOString() : "",
         stepCount: stepCount,
@@ -766,10 +782,26 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
       return base;
     }
 
+    function setPdfProgress(percent, text){
+      const overlay=document.getElementById("progressOverlay");
+      const bar=document.getElementById("progressBar");
+      const label=document.getElementById("progressText");
+      if(overlay) overlay.style.display="flex";
+      if(bar) bar.style.width=Math.max(0,Math.min(100,percent))+"%";
+      if(label) label.textContent=text || "Rapor hazırlanıyor...";
+    }
+    function hidePdfProgress(){
+      const overlay=document.getElementById("progressOverlay");
+      if(overlay) overlay.style.display="none";
+    }
+    function waitFrame(){ return new Promise(resolve=>setTimeout(resolve, 30)); }
+
     async function downloadSessionPDF(){
       try{
         if(completedTaskSessions.length===0){ alert("Henüz tamamlanmış görev yok. Lütfen en az bir görevi tamamlayıp çıktı tahminini gönderiniz."); return; }
         if(!window.jspdf || !window.jspdf.jsPDF){ alert("PDF kütüphanesi yüklenemedi. İnternet bağlantısını ve jsPDF CDN erişimini kontrol edin."); return; }
+        setPdfProgress(2, "PDF raporu başlatılıyor...");
+        await waitFrame();
         const { jsPDF } = window.jspdf;
         const pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
         const pid=document.getElementById("participantId").value.trim()||"participant";
@@ -837,7 +869,11 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
           {taskNo:"-", task:{title:"Toplu Rapor"}}
         );
 
-        completedTaskSessions.forEach(session=>{
+        for(let i=0; i<completedTaskSessions.length; i++){
+          const session=completedTaskSessions[i];
+          const progressBase=8 + Math.round((i/completedTaskSessions.length)*86);
+          setPdfProgress(progressBase, `Görev ${session.taskNo} rapora ekleniyor...`);
+          await waitFrame();
           addWrappedTextPages(`Gorev ${session.taskNo} Bolum Kapagi`, [`${session.task.title}`, `Kod oruntusu: ${session.task.atom}`, `Ogrenci cikti tahmini: ${session.answerText}`, `Gaze ornegi: ${(session.reviewGaze||[]).length}`, `Fixation sayisi: ${(session.reviewFixations||[]).length}`, `Tamamlanma suresi: ${session.completionTimeSec} sn`].join("\n"), session);
           addVisualPage(`Gorev ${session.taskNo} - Isi Yayilim Haritasi`, "heatmap", session);
           addWrappedTextPages(`Gorev ${session.taskNo} - Isi Yayilim Analiz Aciklamasi`, buildAnalysisText("heatmap", session), session);
@@ -851,16 +887,38 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
           addWrappedTextPages(`Gorev ${session.taskNo} - Sesli Dusunme Metni`, transcriptPageText, session);
           const codePageText=["Kod Metni:", ...session.task.code.map((line,i)=>`${i+1}. ${line}`), "", `Ogrencinin yazdigi cikti tahmini: ${session.answerText}`, "", "Not: Grid hucrelerindeki sureler yaklasik dwell time degeridir. Webcam tabanli gaze tracking arastirma amacli yaklasik veri uretir."].join("\n");
           addWrappedTextPages(`Gorev ${session.taskNo} - Kod Metni ve Ogrenci Cikti Tahmini`, codePageText, session);
-        });
+        }
 
+        setPdfProgress(96, "PDF dosyası indirilmeye hazırlanıyor...");
+        await waitFrame();
         pdf.save(`${pid}_tum_gorevler_gaze_session_report.pdf`);
+        setPdfProgress(100, "PDF indiriliyor...");
+        setTimeout(hidePdfProgress, 800);
       }catch(error){
+        hidePdfProgress();
         console.error(error);
         alert("PDF üretilirken hata oluştu. F12 > Console bölümündeki hatayı kontrol edin.");
       }
     }
 
-    function downloadAudio(){if(!audioBlob||!audioUrl){alert("Henüz indirilebilir ses kaydı yok.");return;} const pid=document.getElementById("participantId").value.trim()||"participant"; const link=document.createElement("a"); link.href=audioUrl; link.download=`${pid}_think_aloud_audio.webm`; link.click();}
+    function downloadAudio(){
+      const pid=document.getElementById("participantId").value.trim()||"participant";
+      if(completedTaskSessions.length){
+        const sessionsWithAudio=completedTaskSessions.filter(s=>s.audioUrl);
+        if(!sessionsWithAudio.length){alert("Tamamlanan görevler için indirilebilir ses kaydı bulunamadı.");return;}
+        sessionsWithAudio.forEach((session,index)=>{
+          setTimeout(()=>{
+            const link=document.createElement("a");
+            link.href=session.audioUrl;
+            link.download=`${pid}_gorev_${session.taskNo}_think_aloud_audio.webm`;
+            link.click();
+          }, index*550);
+        });
+        return;
+      }
+      if(!audioBlob||!audioUrl){alert("Henüz indirilebilir ses kaydı yok.");return;}
+      const link=document.createElement("a"); link.href=audioUrl; link.download=`${pid}_think_aloud_audio.webm`; link.click();
+    }
     function downloadTranscript(){const pid=document.getElementById("participantId").value.trim()||"participant"; let content=""; if(completedTaskSessions.length){content=[`Katılımcı: ${pid}`,`Tarih: ${new Date().toISOString()}`,`Tamamlanan görev sayısı: ${completedTaskSessions.length}`,""].join("\n"); completedTaskSessions.forEach(session=>{content += [`GÖREV ${session.taskNo}: ${session.task.title}`,`Kod örüntüsü: ${session.task.atom}`,`Öğrenci çıktı tahmini: ${session.answerText}`,"SES METNİ:",session.transcriptText.trim() || "Konuşma metni oluşmadı / kaydedilmedi.","","------------------------------",""]; content += "\n";});} else { if(!transcriptText.trim()){alert("Henüz indirilebilir konuşma metni yok.");return;} const task=tasks[currentTaskIndex]; content=[`Katılımcı: ${pid}`,`Görev: ${task.title}`,`Kod örüntüsü: ${task.atom}`,`Tarih: ${new Date().toISOString()}`,"","SES METNİ:",transcriptText.trim()].join("\n"); } const blob=new Blob([content],{type:"text/plain;charset=utf-8"}); const url=URL.createObjectURL(blob), link=document.createElement("a"); link.href=url; link.download=`${pid}_all_tasks_think_aloud_transcript.txt`; link.click(); URL.revokeObjectURL(url);}
     function resetData(){if(!confirm("Tüm kayıtlı veriler silinsin mi?"))return; gazeData=[]; fixationData=[]; transitions=[]; reviewGaze=[]; reviewFixations=[]; completedTaskSessions=[]; isBatchRunning=false; stepCount=0; startTime=null; endTime=null; previousAOI=null; previousGrid=null; lastRecordedAt=0; audioChunks=[]; audioBlob=null; audioUrl=null; transcriptText=""; if(speechRecognition&&isSpeechRecognitionRunning)speechRecognition.stop(); document.getElementById("audioStatus").textContent="Hazır değil"; document.getElementById("speechStatus").textContent="Hazır değil"; document.getElementById("reviewStatus").textContent="Hazır değil"; clearReviewCanvas(); updateSummary(); setStatus("Veriler temizlendi.");}
 
