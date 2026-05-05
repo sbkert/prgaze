@@ -38,7 +38,8 @@
     th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
     th { background: #eeeeee; }
 
-    #videoBox { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); width: min(250px, 28vw); height: min(190px, 21vw); min-width: 170px; min-height: 128px; z-index: 9995; border: 3px solid #111; background: #000; overflow: hidden; }
+    #videoBox { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); width: min(250px, 28vw); height: min(190px, 21vw); min-width: 170px; min-height: 128px; z-index: 9995; border: 3px solid #111; background: #000; overflow: hidden; transition: opacity 0.25s ease; }
+    #videoBox.video-hidden { opacity: 0; pointer-events: none; }
     #inputVideo { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
     #faceCanvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform: scaleX(-1); pointer-events: none; }
     #gazeDot { position: fixed; width: 14px; height: 14px; background: rgba(255, 0, 0, 0.88); border-radius: 50%; pointer-events: none; z-index: 10004; display: none; transform: translate(-50%, -50%); box-shadow: 0 0 0 7px rgba(255,0,0,0.16); }
@@ -64,6 +65,8 @@
     #instructionCountdown { display: none; }
     #instructionSkipButton { position: fixed; right: 34px; bottom: 30px; padding: 12px 24px; font-size: 17px; background: #16803c; }
     #instructionSkipButton:hover { background: #0f642e; }
+    .click-warning { color: #b3261e; font-weight: bold; margin-top: 18px; display: block; }
+    #reviewClickHint { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%); z-index: 10004; color: #b3261e; font-weight: bold; font-size: 18px; background: rgba(255,255,255,0.92); border: 2px solid #b3261e; border-radius: 10px; padding: 10px 16px; pointer-events: none; }
     .atom-description { background: #f0f6ff; border-left: 6px solid #2d6cdf; border-radius: 8px; padding: 16px 18px; font-size: 16px; line-height: 1.55; color: #1f2937; }
     .atom-description h3 { margin: 0 0 10px 0; color: #174fa8; font-size: 20px; }
     .atom-description p { margin: 8px 0; }
@@ -122,8 +125,10 @@
   <main>
     <section class="panel">
       <h2>Katılımcı ve Oturum Bilgileri</h2>
-      <label>Katılımcı Kodu:</label>
-      <input type="text" id="participantId" placeholder="Örn: P01" />
+      <label>Öğrenci Ad Soyad:</label>
+      <input type="text" id="studentName" placeholder="Örn: Ayşe Yılmaz" />
+      <label>Öğrenci Numara:</label>
+      <input type="text" id="studentNumber" placeholder="Örn: 202512345" />
       <label>Görev:</label>
       <select id="taskSelector" onchange="loadSelectedTask()"></select>
       <p id="status">Durum: Hazır</p>
@@ -170,7 +175,7 @@
           <div class="aoi" data-aoi="Cevap Alanı">
             <div class="aoi-title">AOI 3: Cevap Alanı</div>
             <label>Tahmin edilen çıktı:</label>
-            <textarea id="answer" style="width:100%; height:120px;" placeholder="Öğrenci çıktıyı buraya yazar..."></textarea>
+            <textarea id="answer" style="width:100%; height:120px;" placeholder="Kod inceleme ekranı tamamlandıktan sonra cevap yazabilirsiniz." disabled></textarea>
             <button id="submitAnswerButton" onclick="submitAnswer()">Gönder</button>
             <p class="small" id="answerSubmitStatus">Çıktı tahmini gönderilmeden rapor ve veri indirme butonları aktif olmayacaktır.</p>
           </div>
@@ -236,6 +241,7 @@
     <div id="reviewCodeWrap" class="aoi" data-aoi="Kod Alanı">
       <pre id="reviewCode"></pre>
       <canvas id="reviewVisualCanvas"></canvas>
+      <div id="reviewClickHint">Kod incelemesini tamamlamak için fareye tıklayınız.</div>
       <button id="reviewContinueButton" type="button" onclick="finishReviewMode()">İlerle</button>
     </div>
   </div>
@@ -375,6 +381,23 @@
     const calibrationPoints = [[15,15],[50,15],[85,15],[15,50],[50,50],[85,50],[15,85],[50,85],[85,85]];
     const gazeReportYOffsetPx = -55; // Rapor görsellerinde gaze katmanını biraz yukarı hizalar.
 
+    function getStudentName(){
+      return (document.getElementById("studentName")?.value || "").trim();
+    }
+    function getStudentNumber(){
+      return (document.getElementById("studentNumber")?.value || "").trim();
+    }
+    function getParticipantIdentifier(){
+      const name = getStudentName();
+      const number = getStudentNumber();
+      return [number, name].filter(Boolean).join("_") || "participant";
+    }
+    function getParticipantDisplayText(){
+      const name = getStudentName() || "Belirtilmedi";
+      const number = getStudentNumber() || "Belirtilmedi";
+      return `Öğrenci: ${name} | Numara: ${number}`;
+    }
+
     function initTasks() {
       const selector = document.getElementById("taskSelector"); selector.innerHTML = "";
       tasks.forEach((task, index) => { const opt = document.createElement("option"); opt.value = index; opt.textContent = `${index + 1}. ${task.title}`; selector.appendChild(opt); });
@@ -390,7 +413,10 @@
       document.getElementById("taskInfo").textContent = `Görev ${index + 1} / ${tasks.length}`;
       document.getElementById("atomInfo").textContent = task.atom;
       document.getElementById("taskPrompt").textContent = task.prompt;
-      document.getElementById("answer").value = "";
+      const answerBox=document.getElementById("answer");
+      answerBox.value = "";
+      answerBox.disabled = true;
+      answerBox.placeholder = "Kod inceleme ekranı tamamlandıktan sonra cevap yazabilirsiniz.";
       submittedAnswerText = "";
       isAnswerSubmitted = false;
       setDownloadButtonsEnabled(completedTaskSessions.length > 0 && !isBatchRunning);
@@ -416,6 +442,7 @@
 
     async function startTracker() {
       setStatus("MediaPipe kamera ve yüz/iris algılama başlatılıyor...");
+      const videoBox=document.getElementById("videoBox"); if(videoBox) videoBox.classList.remove("video-hidden");
       const video = document.getElementById("inputVideo"); const canvas = document.getElementById("faceCanvas"); const ctx = canvas.getContext("2d");
       try {
         faceMesh = new FaceMesh({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
@@ -447,7 +474,9 @@
 
     function startCalibration() {
       if(!isTrackerRunning){alert("Önce kamera ve göz takibini başlatınız.");return;} if(!currentFeature){alert("Yüz/iris algılanmadı. Işığı artırın ve kameraya düz bakın.");return;}
-      calibrationSamples=[]; calibrationIndex=0; isCalibrated=false; modelX=null; modelY=null; lastGaze=null; document.getElementById("calibrationStatus").textContent="Kalibrasyon yapılıyor"; document.getElementById("calibrationScreen").style.display="block"; showCalibrationPoint();
+      calibrationSamples=[]; calibrationIndex=0; isCalibrated=false; modelX=null; modelY=null; lastGaze=null; document.getElementById("calibrationStatus").textContent="Kalibrasyon yapılıyor";
+      const videoBox=document.getElementById("videoBox"); if(videoBox) videoBox.classList.add("video-hidden");
+      document.getElementById("calibrationScreen").style.display="block"; showCalibrationPoint();
     }
     function showCalibrationPoint(){
       const screen=document.getElementById("calibrationScreen"); const old=document.querySelector(".calibration-point"); if(old) old.remove();
@@ -505,7 +534,7 @@
       const counter=document.getElementById("instructionCountdown");
       const skipBtn=document.getElementById("instructionSkipButton");
       titleEl.textContent=title;
-      textEl.textContent=text;
+      textEl.innerHTML=text;
       if(counter) counter.textContent="";
       overlay.style.display="flex";
       if(instructionTimerId){ clearInterval(instructionTimerId); instructionTimerId=null; }
@@ -520,8 +549,9 @@
     }
 
     async function startRecording(){
-      const pid=document.getElementById("participantId").value.trim();
-      if(!pid){alert("Lütfen önce katılımcı kodunu giriniz.");return;}
+      const studentName=getStudentName();
+      const studentNumber=getStudentNumber();
+      if(!studentName || !studentNumber){alert("Lütfen önce öğrenci ad soyad ve numara alanlarını doldurunuz.");return;}
       if(!isCalibrated){alert("Lütfen önce otomatik kalibrasyonu tamamlayınız.");return;}
       completedTaskSessions=[];
       isBatchRunning=true;
@@ -535,7 +565,7 @@
 
       await showInstructionOverlay(
         "Kod İnceleme Yönergesi",
-        "Karşınıza tam ekran olarak kod satırları gelecektir. Kod satırlarını incelemek ve çıktıyı tahmin etmek için İnceleme sürecinde, göz takibiniz analiz edileceğinden, ekranda kod satırlarının bulunduğu alana odaklı olarak incelemenizi yapınız. Ek olarak, ses kaydınız da alınarak problem çözme süreciniz incelenecektir. Analiz sürecinizdeki tüm düşüncelerinizi sesli olarak ifade etmeniz çalışma verimliliği için çok önemli olacaktır. Kod satırlarının kenarlarında bulunan satır numaralarını analizlerinizde hedef belirlemek için kullanabilirsiniz.",
+        "Karşınıza tam ekran olarak kod satırları gelecektir. Kod satırlarını inceleyerek çıktıyı tahmin ediniz. İnceleme sürecinde, göz takibiniz analiz edileceğinden ekranda kod satırlarının bulunduğu alana odaklı olarak incelemenizi yapınız. Ek olarak, ses kaydınız da alınarak problem çözme süreciniz incelenecektir. Analiz sürecinizdeki tüm düşüncelerinizi sesli olarak ifade etmeniz çalışma verimliliği için çok önemlidir. Kod satırlarının kenarlarında bulunan satır numaralarını analizlerinizde hedef belirlemek için kullanabilirsiniz.<span class='click-warning'>Kod inceleme ekranı fareye tıklandığında kapanacaktır.</span>",
         25
       );
 
@@ -556,6 +586,8 @@
       captureReviewCodeLayout();
       clearReviewCanvas();
       document.getElementById("reviewStatus").textContent="İnceleme sürüyor";
+      const answerBox=document.getElementById("answer");
+      if(answerBox){ answerBox.disabled=true; answerBox.placeholder="Kod inceleme ekranı tamamlandıktan sonra cevap yazabilirsiniz."; }
       const continueBtn=document.getElementById("reviewContinueButton");
       if(continueBtn) continueBtn.disabled=false;
     }
@@ -570,6 +602,8 @@
       document.getElementById("reviewStatus").textContent="İnceleme tamamlandı";
       finalizeReviewVisual();
       updateSummary();
+      const answerBox=document.getElementById("answer");
+      if(answerBox){ answerBox.disabled=false; answerBox.placeholder="Öğrenci çıktıyı buraya yazar..."; answerBox.focus(); }
       const submitBtn=document.getElementById("submitAnswerButton"); if(submitBtn) submitBtn.disabled=false;
       setStatus("Kod inceleme tamamlandı. Lütfen AOI 3: Cevap Alanı bölümüne çıktı tahmininizi yazıp Gönder butonuna tıklayınız.");
       await showInstructionOverlay(
@@ -578,6 +612,12 @@
         10
       );
     }
+
+    document.getElementById("reviewOverlay").addEventListener("click", function(e){
+      if(!isReviewMode) return;
+      finishReviewMode();
+    });
+
     function resizeReviewCanvas(){
       const wrap=document.getElementById("reviewCodeWrap"), c=document.getElementById("reviewVisualCanvas");
       c.width=wrap.clientWidth;
@@ -618,7 +658,7 @@
     function clearReviewCanvas(){const c=document.getElementById("reviewVisualCanvas"), ctx=c.getContext("2d"); ctx.clearRect(0,0,c.width,c.height);}
     function recordGazeSample(gaze){
       if(!isRecording||!gaze)return; const nowMs=performance.now(); if(nowMs-lastRecordedAt<sampleIntervalMs)return; lastRecordedAt=nowMs;
-      const pid=document.getElementById("participantId").value.trim(), task=tasks[currentTaskIndex], aoi=detectAOI(gaze.x,gaze.y), grid=detectGrid7x7(gaze.x,gaze.y), now=new Date(), elapsedFromStartMs=startTime?now-startTime:0;
+      const pid=getParticipantIdentifier(), task=tasks[currentTaskIndex], aoi=detectAOI(gaze.x,gaze.y), grid=detectGrid7x7(gaze.x,gaze.y), now=new Date(), elapsedFromStartMs=startTime?now-startTime:0;
       if(previousAOI&&previousAOI!==aoi) transitions.push({participantId:pid,taskNo:currentTaskIndex+1,taskName:task.title,atomType:task.atom,timestamp:now.toISOString(),fromAOI:previousAOI,toAOI:aoi,fromGrid:previousGrid,toGrid:grid}); previousAOI=aoi; previousGrid=grid;
       gazeData.push({participantId:pid,taskNo:currentTaskIndex+1,taskName:task.title,atomType:task.atom,timestamp:now.toISOString(),elapsedFromStartMs,x:Math.round(gaze.x),y:Math.round(gaze.y),aoi,grid7x7:grid,stepCount,answerText:document.getElementById("answer").value.replace(/\n/g," "),observerNote:""});
       if(isReviewMode) recordReviewGaze(gaze); detectFixations(); updateSummary();
@@ -653,7 +693,7 @@
     function saveCompletedTaskSession(answer){
       const task=tasks[currentTaskIndex];
       const session={
-        participantId: document.getElementById("participantId").value.trim() || "participant",
+        participantId: getParticipantIdentifier(),
         taskNo: currentTaskIndex + 1,
         taskIndex: currentTaskIndex,
         task: JSON.parse(JSON.stringify(task)),
@@ -746,7 +786,7 @@
       csvDownload(rows,["participantId","taskNo","taskName","atomType","timestamp","fromAOI","toAOI","fromGrid","toGrid","submittedAnswerText"],"all_tasks_scan_path_transitions_python_tasks.csv");
     }
     function downloadSummaryCSV(){
-      const sessions=completedTaskSessions.length ? completedTaskSessions : [{participantId:document.getElementById("participantId").value.trim(), taskNo:currentTaskIndex+1, task:tasks[currentTaskIndex], answerText:getStudentAnswerText(), gazeData, fixationData, transitions, completionTimeSec:getCompletionSeconds(), stepCount}];
+      const sessions=completedTaskSessions.length ? completedTaskSessions : [{participantId:getParticipantIdentifier(), taskNo:currentTaskIndex+1, task:tasks[currentTaskIndex], answerText:getStudentAnswerText(), gazeData, fixationData, transitions, completionTimeSec:getCompletionSeconds(), stepCount}];
       const rows=[];
       sessions.forEach(session=>{
         const grouped={};
@@ -944,7 +984,7 @@
     }
 
     async function downloadReviewImage(){
-      const pid=document.getElementById("participantId").value.trim()||"participant";
+      const pid=getParticipantIdentifier();
       if(completedTaskSessions.length){
         if(!window.JSZip){ alert("ZIP kütüphanesi yüklenemedi. İnternet bağlantısını ve JSZip CDN erişimini kontrol edin."); return; }
         const zip=new JSZip();
@@ -1082,7 +1122,7 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
         await waitFrame();
         const { jsPDF } = window.jspdf;
         const pdf=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
-        const pid=document.getElementById("participantId").value.trim()||"participant";
+        const pid=getParticipantIdentifier();
         const now=new Date().toISOString();
         const imgX=14, imgY=42, imgW=268, imgH=150;
         let isFirstPage=true;
@@ -1103,7 +1143,7 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
         function addHeader(title, session){
           pdf.setFontSize(18); pdfText(title,14,15);
           pdf.setFontSize(10);
-          pdfText(`Katilimci: ${pid}`,14,23);
+          pdfText(`Ogrenci: ${pid}`,14,23);
           pdfText(`Gorev: ${session.taskNo} - ${session.task.title}`,75,23);
           pdfText(`Tarih: ${now}`,14,29);
           pdfText(`Kod inceleme gaze kaydi: ${(session.reviewGaze||[]).length} | Fixation: ${(session.reviewFixations||[]).length} | Toplam gaze: ${(session.gazeData||[]).length}`,170,29);
@@ -1136,7 +1176,7 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
             pdf.setFontSize(16);
             pdfText(pageNo===1 ? title : `${title} (devam)`, marginX, topY);
             pdf.setFontSize(10);
-            pdfText(`Katilimci: ${pid} | Gorev: ${session.taskNo} - ${session.task.title}`, marginX, metaY);
+            pdfText(`Ogrenci: ${pid} | Gorev: ${session.taskNo} - ${session.task.title}`, marginX, metaY);
             let y=bodyStartY;
             pdf.setFontSize(10);
             while(index < lines.length && y <= bottomY){
@@ -1211,7 +1251,7 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
     }
 
     async function downloadAudio(){
-      const pid=document.getElementById("participantId").value.trim()||"participant";
+      const pid=getParticipantIdentifier();
       if(completedTaskSessions.length){
         const sessionsWithAudio=completedTaskSessions.filter(s=>s.audioBlob);
         if(!sessionsWithAudio.length){alert("Tamamlanan görevler için indirilebilir ses kaydı bulunamadı.");return;}
@@ -1232,8 +1272,8 @@ En uzun fixation süresi yaklaşık ${longestFix.toFixed(2)} sn olarak hesaplanm
       if(!audioBlob||!audioUrl){alert("Henüz indirilebilir ses kaydı yok.");return;}
       const link=document.createElement("a"); link.href=audioUrl; link.download=`${pid}_think_aloud_audio.webm`; link.click();
     }
-    function downloadTranscript(){const pid=document.getElementById("participantId").value.trim()||"participant"; let content=""; if(completedTaskSessions.length){content=[`Katılımcı: ${pid}`,`Tarih: ${new Date().toISOString()}`,`Tamamlanan görev sayısı: ${completedTaskSessions.length}`,""].join("\n"); completedTaskSessions.forEach(session=>{content += [`GÖREV ${session.taskNo}: ${session.task.title}`,`Kod örüntüsü: ${session.task.atom}`,`Öğrenci çıktı tahmini: ${session.answerText}`,"SES METNİ:",session.transcriptText.trim() || "Konuşma metni oluşmadı / kaydedilmedi.","","------------------------------",""]; content += "\n";});} else { if(!transcriptText.trim()){alert("Henüz indirilebilir konuşma metni yok.");return;} const task=tasks[currentTaskIndex]; content=[`Katılımcı: ${pid}`,`Görev: ${task.title}`,`Kod örüntüsü: ${task.atom}`,`Tarih: ${new Date().toISOString()}`,"","SES METNİ:",transcriptText.trim()].join("\n"); } const blob=new Blob([content],{type:"text/plain;charset=utf-8"}); const url=URL.createObjectURL(blob), link=document.createElement("a"); link.href=url; link.download=`${pid}_all_tasks_think_aloud_transcript.txt`; link.click(); URL.revokeObjectURL(url);}
-    function resetData(){if(!confirm("Tüm kayıtlı veriler silinsin mi?"))return; hideCompletionNotice(); gazeData=[]; fixationData=[]; transitions=[]; reviewGaze=[]; reviewFixations=[]; completedTaskSessions=[]; isBatchRunning=false; stepCount=0; startTime=null; endTime=null; previousAOI=null; previousGrid=null; lastRecordedAt=0; audioChunks=[]; audioBlob=null; audioUrl=null; transcriptText=""; if(speechRecognition&&isSpeechRecognitionRunning)speechRecognition.stop(); document.getElementById("audioStatus").textContent="Hazır değil"; document.getElementById("speechStatus").textContent="Hazır değil"; document.getElementById("reviewStatus").textContent="Hazır değil"; clearReviewCanvas(); updateSummary(); setStatus("Veriler temizlendi.");}
+    function downloadTranscript(){const pid=getParticipantIdentifier(); let content=""; if(completedTaskSessions.length){content=[`Öğrenci: ${pid}`,`Tarih: ${new Date().toISOString()}`,`Tamamlanan görev sayısı: ${completedTaskSessions.length}`,""].join("\n"); completedTaskSessions.forEach(session=>{content += [`GÖREV ${session.taskNo}: ${session.task.title}`,`Kod örüntüsü: ${session.task.atom}`,`Öğrenci çıktı tahmini: ${session.answerText}`,"SES METNİ:",session.transcriptText.trim() || "Konuşma metni oluşmadı / kaydedilmedi.","","------------------------------",""]; content += "\n";});} else { if(!transcriptText.trim()){alert("Henüz indirilebilir konuşma metni yok.");return;} const task=tasks[currentTaskIndex]; content=[`Öğrenci: ${pid}`,`Görev: ${task.title}`,`Kod örüntüsü: ${task.atom}`,`Tarih: ${new Date().toISOString()}`,"","SES METNİ:",transcriptText.trim()].join("\n"); } const blob=new Blob([content],{type:"text/plain;charset=utf-8"}); const url=URL.createObjectURL(blob), link=document.createElement("a"); link.href=url; link.download=`${pid}_all_tasks_think_aloud_transcript.txt`; link.click(); URL.revokeObjectURL(url);}
+    function resetData(){if(!confirm("Tüm kayıtlı veriler silinsin mi?"))return; hideCompletionNotice(); const videoBox=document.getElementById("videoBox"); if(videoBox) videoBox.classList.remove("video-hidden"); gazeData=[]; fixationData=[]; transitions=[]; reviewGaze=[]; reviewFixations=[]; completedTaskSessions=[]; isBatchRunning=false; stepCount=0; startTime=null; endTime=null; previousAOI=null; previousGrid=null; lastRecordedAt=0; audioChunks=[]; audioBlob=null; audioUrl=null; transcriptText=""; if(speechRecognition&&isSpeechRecognitionRunning)speechRecognition.stop(); document.getElementById("audioStatus").textContent="Hazır değil"; document.getElementById("speechStatus").textContent="Hazır değil"; document.getElementById("reviewStatus").textContent="Hazır değil"; clearReviewCanvas(); updateSummary(); setStatus("Veriler temizlendi.");}
 
     window.addEventListener("resize",()=>{if(document.getElementById("reviewOverlay").style.display==="block")resizeReviewCanvas();});
     window.addEventListener("DOMContentLoaded",()=>{try{initTasks();}catch(e){console.error(e);alert("Görevler yüklenemedi. F12 > Console bölümündeki hatayı kontrol edin.");}});
